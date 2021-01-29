@@ -20,11 +20,15 @@ export default class Toolbar {
   constructor(ctx) {
     this.ctx = ctx
     this.w = ctx.w
+    const w = this.w
 
     this.ev = this.w.config.chart.events
     this.selectedClass = 'apexcharts-selected'
 
     this.localeValues = this.w.globals.locale.toolbar
+
+    this.minX = w.globals.minX
+    this.maxX = w.globals.maxX
   }
 
   createToolbar() {
@@ -227,18 +231,26 @@ export default class Toolbar {
   }
 
   toggleZoomSelection(type) {
-    this.toggleOtherControls()
+    const charts = this.ctx.getSyncedCharts()
 
-    let el = type === 'selection' ? this.elSelection : this.elZoom
-    let enabledType = type === 'selection' ? 'selectionEnabled' : 'zoomEnabled'
+    charts.forEach((ch) => {
+      ch.ctx.toolbar.toggleOtherControls()
 
-    this.w.globals[enabledType] = !this.w.globals[enabledType]
+      let el =
+        type === 'selection'
+          ? ch.ctx.toolbar.elSelection
+          : ch.ctx.toolbar.elZoom
+      let enabledType =
+        type === 'selection' ? 'selectionEnabled' : 'zoomEnabled'
 
-    if (!el.classList.contains(this.selectedClass)) {
-      el.classList.add(this.selectedClass)
-    } else {
-      el.classList.remove(this.selectedClass)
-    }
+      ch.w.globals[enabledType] = !ch.w.globals[enabledType]
+
+      if (!el.classList.contains(ch.ctx.toolbar.selectedClass)) {
+        el.classList.add(ch.ctx.toolbar.selectedClass)
+      } else {
+        el.classList.remove(ch.ctx.toolbar.selectedClass)
+      }
+    })
   }
 
   getToolbarIconsReference() {
@@ -274,14 +286,20 @@ export default class Toolbar {
   }
 
   togglePanning() {
-    this.toggleOtherControls()
-    this.w.globals.panEnabled = !this.w.globals.panEnabled
+    const charts = this.ctx.getSyncedCharts()
 
-    if (!this.elPan.classList.contains(this.selectedClass)) {
-      this.elPan.classList.add(this.selectedClass)
-    } else {
-      this.elPan.classList.remove(this.selectedClass)
-    }
+    charts.forEach((ch) => {
+      ch.ctx.toolbar.toggleOtherControls()
+      ch.w.globals.panEnabled = !ch.w.globals.panEnabled
+
+      if (
+        !ch.ctx.toolbar.elPan.classList.contains(ch.ctx.toolbar.selectedClass)
+      ) {
+        ch.ctx.toolbar.elPan.classList.add(ch.ctx.toolbar.selectedClass)
+      } else {
+        ch.ctx.toolbar.elPan.classList.remove(ch.ctx.toolbar.selectedClass)
+      }
+    })
   }
 
   toggleOtherControls() {
@@ -303,9 +321,14 @@ export default class Toolbar {
   handleZoomIn() {
     const w = this.w
 
-    const centerX = (w.globals.minX + w.globals.maxX) / 2
-    let newMinX = (w.globals.minX + centerX) / 2
-    let newMaxX = (w.globals.maxX + centerX) / 2
+    if (w.globals.isTimelineBar) {
+      this.minX = w.globals.minY
+      this.maxX = w.globals.maxY
+    }
+
+    const centerX = (this.minX + this.maxX) / 2
+    let newMinX = (this.minX + centerX) / 2
+    let newMaxX = (this.maxX + centerX) / 2
 
     const newMinXMaxX = this._getNewMinXMaxX(newMinX, newMaxX)
 
@@ -317,17 +340,22 @@ export default class Toolbar {
   handleZoomOut() {
     const w = this.w
 
+    if (w.globals.isTimelineBar) {
+      this.minX = w.globals.minY
+      this.maxX = w.globals.maxY
+    }
+
     // avoid zooming out beyond 1000 which may result in NaN values being printed on x-axis
     if (
       w.config.xaxis.type === 'datetime' &&
-      new Date(w.globals.minX).getUTCFullYear() < 1000
+      new Date(this.minX).getUTCFullYear() < 1000
     ) {
       return
     }
 
-    const centerX = (w.globals.minX + w.globals.maxX) / 2
-    let newMinX = w.globals.minX - (centerX - w.globals.minX)
-    let newMaxX = w.globals.maxX - (centerX - w.globals.maxX)
+    const centerX = (this.minX + this.maxX) / 2
+    let newMinX = this.minX - (centerX - this.minX)
+    let newMaxX = this.maxX - (centerX - this.maxX)
 
     const newMinXMaxX = this._getNewMinXMaxX(newMinX, newMaxX)
 
@@ -346,6 +374,11 @@ export default class Toolbar {
 
   zoomUpdateOptions(newMinX, newMaxX) {
     const w = this.w
+
+    if (newMinX === undefined && newMaxX === undefined) {
+      this.handleZoomReset()
+      return
+    }
 
     if (w.config.xaxis.convertedCatToNumeric) {
       // in category charts, avoid zooming out beyond min and max
@@ -434,7 +467,10 @@ export default class Toolbar {
         exprt.exportToPng(this.ctx)
         break
       case 'csv':
-        exprt.exportToCSV({ series: w.config.series })
+        exprt.exportToCSV({
+          series: w.config.series,
+          columnDelimiter: w.config.chart.toolbar.export.csv.columnDelimiter
+        })
         break
     }
   }
@@ -445,26 +481,42 @@ export default class Toolbar {
     charts.forEach((ch) => {
       let w = ch.w
 
-      if (
-        w.globals.minX !== w.globals.initialMinX ||
-        w.globals.maxX !== w.globals.initialMaxX
-      ) {
-        ch.updateHelpers.revertDefaultAxisMinMax()
+      // forget lastXAxis min/max as reset button isn't resetting the x-axis completely if zoomX is called before
+      w.globals.lastXAxis.min = undefined
+      w.globals.lastXAxis.max = undefined
 
-        if (typeof w.config.chart.events.zoomed === 'function') {
-          this.zoomCallback({
-            min: w.config.xaxis.min,
-            max: w.config.xaxis.max
-          })
+      ch.updateHelpers.revertDefaultAxisMinMax()
+
+      if (typeof w.config.chart.events.beforeResetZoom === 'function') {
+        // here, user get an option to control xaxis and yaxis when resetZoom is called
+        // at this point, whatever is returned from w.config.chart.events.beforeResetZoom
+        // is set as the new xaxis/yaxis min/max
+        const resetZoomRange = w.config.chart.events.beforeResetZoom(ch, w)
+
+        if (resetZoomRange) {
+          ch.updateHelpers.revertDefaultAxisMinMax(resetZoomRange)
         }
-
-        w.globals.zoomed = false
-
-        ch.updateHelpers._updateSeries(
-          w.globals.initialSeries,
-          w.config.chart.animations.dynamicAnimation.enabled
-        )
       }
+
+      if (typeof w.config.chart.events.zoomed === 'function') {
+        ch.ctx.toolbar.zoomCallback({
+          min: w.config.xaxis.min,
+          max: w.config.xaxis.max
+        })
+      }
+
+      w.globals.zoomed = false
+
+      // if user has some series collapsed before hitting zoom reset button,
+      // those series should stay collapsed
+      let series = ch.ctx.series.emptyCollapsedSeries(
+        Utils.clone(w.globals.initialSeries)
+      )
+
+      ch.updateHelpers._updateSeries(
+        series,
+        w.config.chart.animations.dynamicAnimation.enabled
+      )
     })
   }
 

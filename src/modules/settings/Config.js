@@ -51,7 +51,9 @@ export default class Config {
         'bubble',
         'scatter',
         'heatmap',
+        'treemap',
         'pie',
+        'polarArea',
         'donut',
         'radar',
         'radialBar'
@@ -122,6 +124,7 @@ export default class Config {
 
     const unsupportedZoom =
       chartType === 'pie' ||
+      chartType === 'polarArea' ||
       chartType === 'donut' ||
       chartType === 'radar' ||
       chartType === 'radialBar' ||
@@ -145,7 +148,7 @@ export default class Config {
     return opts
   }
 
-  extendYAxis(opts) {
+  extendYAxis(opts, w) {
     let options = new Options()
 
     if (
@@ -181,19 +184,20 @@ export default class Config {
       }
     })
 
+    let series = opts.series
+    if (w && !series) {
+      series = w.config.series
+    }
+
     // A logarithmic chart works correctly when each series has a corresponding y-axis
     // If this is not the case, we manually create yaxis for multi-series log chart
-    if (
-      isLogY &&
-      opts.series.length !== opts.yaxis.length &&
-      opts.series.length
-    ) {
-      opts.yaxis = opts.series.map((s, i) => {
+    if (isLogY && series.length !== opts.yaxis.length && series.length) {
+      opts.yaxis = series.map((s, i) => {
         if (!s.name) {
-          opts.series[i].name = `series-${i + 1}`
+          series[i].name = `series-${i + 1}`
         }
         if (opts.yaxis[i]) {
-          opts.yaxis[i].seriesName = opts.series[i].name
+          opts.yaxis[i].seriesName = series[i].name
           return opts.yaxis[i]
         } else {
           const newYaxis = Utils.extend(options.yAxis, opts.yaxis[0])
@@ -203,11 +207,7 @@ export default class Config {
       })
     }
 
-    if (
-      isLogY &&
-      opts.series.length > 1 &&
-      opts.series.length !== opts.yaxis.length
-    ) {
+    if (isLogY && series.length > 1 && series.length !== opts.yaxis.length) {
       console.warn(
         'A multi-series logarithmic chart should have equal number of series and y-axes. Please make sure to equalize both.'
       )
@@ -279,6 +279,10 @@ export default class Config {
         opts.chart.foreColor = '#f6f7f8'
       }
 
+      if (!opts.chart.background) {
+        opts.chart.background = '#424242'
+      }
+
       if (!opts.theme.palette) {
         opts.theme.palette = 'palette4'
       }
@@ -294,10 +298,7 @@ export default class Config {
       )
     }
 
-    if (
-      (config.chart.type === 'bar' || config.chart.type === 'rangeBar') &&
-      config.plotOptions.bar.horizontal
-    ) {
+    if (config.chart.type === 'bar' && config.plotOptions.bar.horizontal) {
       // No multiple yaxis for bars
       if (config.yaxis.length > 1) {
         throw new Error(

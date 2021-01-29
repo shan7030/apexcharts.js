@@ -45,14 +45,17 @@ class TimeScale {
     const daysWidthOnXAxis = w.globals.gridWidth / daysDiff
     const hoursWidthOnXAxis = daysWidthOnXAxis / 24
     const minutesWidthOnXAxis = hoursWidthOnXAxis / 60
+    const secondsWidthOnXAxis = minutesWidthOnXAxis / 60
 
     let numberOfHours = Math.floor(daysDiff * 24)
     let numberOfMinutes = Math.floor(daysDiff * 24 * 60)
+    let numberOfSeconds = Math.floor(daysDiff * 24 * 60 * 60)
     let numberOfDays = Math.floor(daysDiff)
     let numberOfMonths = Math.floor(daysDiff / 30)
     let numberOfYears = Math.floor(daysDiff / 365)
 
     const firstVal = {
+      minSecond: timeIntervals.minSecond,
       minMinute: timeIntervals.minMinute,
       minHour: timeIntervals.minHour,
       minDate: timeIntervals.minDate,
@@ -60,6 +63,7 @@ class TimeScale {
       minYear: timeIntervals.minYear
     }
 
+    let currentSecond = firstVal.minSecond
     let currentMinute = firstVal.minMinute
     let currentHour = firstVal.minHour
     let currentMonthDate = firstVal.minDate
@@ -69,6 +73,7 @@ class TimeScale {
 
     const params = {
       firstVal,
+      currentSecond,
       currentMinute,
       currentHour,
       currentMonthDate,
@@ -78,6 +83,8 @@ class TimeScale {
       daysWidthOnXAxis,
       hoursWidthOnXAxis,
       minutesWidthOnXAxis,
+      secondsWidthOnXAxis,
+      numberOfSeconds,
       numberOfMinutes,
       numberOfHours,
       numberOfDays,
@@ -300,7 +307,7 @@ class TimeScale {
 
     let unit = 'year'
 
-    if (firstVal.minDate > 1 && firstVal.minMonth > 0) {
+    if (firstVal.minDate > 1 || firstVal.minMonth > 0) {
       let remainingDays = dt.determineRemainingDaysOfYear(
         firstVal.minYear,
         firstVal.minMonth,
@@ -419,7 +426,7 @@ class TimeScale {
       } else {
         unit = 'month'
       }
-      let year = currentYear + Math.floor(month / 12) + yrCounter
+      let year = this._getYear(currentYear, month, yrCounter)
 
       pos = dt.determineDaysOfMonths(month, year) * daysWidthOnXAxis + pos
       let monthVal = month === 0 ? year : month
@@ -483,7 +490,7 @@ class TimeScale {
       position: firstTickPosition,
       value: val,
       unit,
-      year: currentYear,
+      year: this._getYear(currentYear, month, yrCounter),
       month: Utils.monthMod(month),
       day: date
     })
@@ -496,10 +503,10 @@ class TimeScale {
       month = changeMonth(
         date,
         month,
-        currentYear + Math.floor(month / 12) + yrCounter
+        this._getYear(currentYear, month, yrCounter)
       )
 
-      let year = currentYear + Math.floor(month / 12) + yrCounter
+      let year = this._getYear(currentYear, month, yrCounter)
 
       pos = 24 * hoursWidthOnXAxis + pos
       let value = date === 1 ? Utils.monthMod(month) : date
@@ -546,7 +553,8 @@ class TimeScale {
       return month
     }
 
-    let remainingMins = 60 - firstVal.minMinute
+    // factor in minSeconds as well
+    let remainingMins = 60 - (firstVal.minMinute + firstVal.minSecond / 60.0)
 
     let firstTickPosition = remainingMins * minutesWidthOnXAxis
     let firstTickValue = firstVal.minHour + 1
@@ -589,7 +597,7 @@ class TimeScale {
         month = changeMonth(date, month)
       }
 
-      let year = currentYear + Math.floor(month / 12) + yrCounter
+      let year = this._getYear(currentYear, month, yrCounter)
       pos =
         hour === 0 && i === 0
           ? remainingMins * minutesWidthOnXAxis
@@ -611,20 +619,22 @@ class TimeScale {
 
   generateMinuteScale({
     firstVal,
+    currentSecond,
     currentMinute,
     currentHour,
     currentDate,
     currentMonth,
     currentYear,
     minutesWidthOnXAxis,
+    secondsWidthOnXAxis,
     numberOfMinutes
   }) {
     let yrCounter = 0
     let unit = 'minute'
 
-    let remainingMins = currentMinute - firstVal.minMinute
+    let remainingSecs = 60 - firstVal.minSecond
 
-    let firstTickPosition = minutesWidthOnXAxis - remainingMins
+    let firstTickPosition = remainingSecs * secondsWidthOnXAxis
     let firstTickValue = firstVal.minMinute + 1
     let minute = firstTickValue + 1
 
@@ -664,7 +674,7 @@ class TimeScale {
         hour,
         minute,
         day: date,
-        year: currentYear + Math.floor(month / 12) + yrCounter,
+        year: this._getYear(currentYear, month, yrCounter),
         month: Utils.monthMod(month)
       })
 
@@ -711,7 +721,11 @@ class TimeScale {
 
       const raw = this.createRawDateString(ts, value)
 
-      const dateToFormat = dt.getDate(raw)
+      let dateToFormat = dt.getDate(dt.parseDate(raw))
+      if (!this.utc) {
+        // Fixes #1726, #1544, #1485, #1255
+        dateToFormat = dt.getDate(dt.parseDateWithTimezone(raw))
+      }
 
       if (w.config.xaxis.labels.format === undefined) {
         let customFormat = 'dd MMM'
@@ -778,6 +792,10 @@ class TimeScale {
     filteredArray = filteredArray.filter((f) => f !== null)
 
     return filteredArray
+  }
+
+  _getYear(currentYear, month, yrCounter) {
+    return currentYear + Math.floor(month / 12) + yrCounter
   }
 }
 

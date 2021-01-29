@@ -85,6 +85,7 @@ class Range {
     if (
       cnf.chart.type === 'rangeBar' &&
       gl.seriesRangeStart.length &&
+      gl.isBarHorizontal &&
       cnf.xaxis.type === 'datetime'
     ) {
       minY = lowestY
@@ -146,7 +147,8 @@ class Range {
     if (
       cnf.chart.type === 'line' ||
       cnf.chart.type === 'area' ||
-      cnf.chart.type === 'candlestick'
+      cnf.chart.type === 'candlestick' ||
+      (cnf.chart.type === 'rangeBar' && !gl.isBarHorizontal)
     ) {
       if (
         gl.minY === Number.MIN_VALUE &&
@@ -154,7 +156,11 @@ class Range {
         lowestYInAllSeries !== gl.maxY // single value possibility
       ) {
         let diff = gl.maxY - lowestYInAllSeries
-        if (lowestYInAllSeries >= 0 && lowestYInAllSeries <= 10) {
+        if (
+          (lowestYInAllSeries >= 0 && lowestYInAllSeries <= 10) ||
+          cnf.yaxis[0].min !== undefined ||
+          cnf.yaxis[0].max !== undefined
+        ) {
           // if minY is already 0/low value, we don't want to go negatives here - so this check is essential.
           diff = 0
         }
@@ -178,7 +184,10 @@ class Range {
         if (typeof yaxe.max === 'number') {
           gl.maxYArr[index] = yaxe.max
         } else if (typeof yaxe.max === 'function') {
-          gl.maxYArr[index] = yaxe.max(gl.maxY)
+          // fixes apexcharts.js/issues/2098
+          gl.maxYArr[index] = yaxe.max(
+            gl.isMultipleYAxis ? gl.maxYArr[index] : gl.maxY
+          )
         }
 
         // gl.maxY is for single y-axis chart, it will be ignored in multi-yaxis
@@ -188,7 +197,14 @@ class Range {
         if (typeof yaxe.min === 'number') {
           gl.minYArr[index] = yaxe.min
         } else if (typeof yaxe.min === 'function') {
-          gl.minYArr[index] = yaxe.min(gl.minY)
+          // fixes apexcharts.js/issues/2098
+          gl.minYArr[index] = yaxe.min(
+            gl.isMultipleYAxis
+              ? gl.minYArr[index] === Number.MIN_VALUE
+                ? 0
+                : gl.minYArr[index]
+              : gl.minY
+          )
         }
         // gl.minY is for single y-axis chart, it will be ignored in multi-yaxis
         gl.minY = gl.minYArr[index]
@@ -225,7 +241,8 @@ class Range {
       minY: gl.minY,
       maxY: gl.maxY,
       minYArr: gl.minYArr,
-      maxYArr: gl.maxYArr
+      maxYArr: gl.maxYArr,
+      yAxisScale: gl.yAxisScale
     }
   }
 
@@ -341,6 +358,10 @@ class Range {
       }
     }
 
+    if (gl.isBarHorizontal && gl.labels.length) {
+      gl.xTickAmount = gl.labels.length
+    }
+
     // single dataPoint
     this._handleSingleDataPoint()
 
@@ -419,13 +440,14 @@ class Range {
 
         seriesX.forEach((s, j) => {
           if (j > 0) {
-            let xDiff = s - gl.seriesX[i][j - 1]
+            let xDiff = s - seriesX[j - 1]
             if (xDiff > 0) {
               gl.minXDiff = Math.min(xDiff, gl.minXDiff)
             }
           }
         })
         if (gl.dataPoints === 1 && gl.minXDiff === Number.MAX_VALUE) {
+          // fixes apexcharts.js #1221
           gl.minXDiff = 0.5
         }
       })

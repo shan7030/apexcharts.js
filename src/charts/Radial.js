@@ -37,11 +37,6 @@ class Radial extends Pie {
 
     if (this.endAngle === 360) this.endAngle = 359.99
 
-    this.fullAngle =
-      360 -
-      w.config.plotOptions.radialBar.endAngle -
-      w.config.plotOptions.radialBar.startAngle
-
     this.margin = parseInt(w.config.plotOptions.radialBar.track.margin, 10)
   }
 
@@ -344,6 +339,7 @@ class Radial extends Pie {
         const shadow = w.config.chart.dropShadow
         filters.dropShadow(elPath, shadow, i)
       }
+      filters.setSelectionFilter(elPath, 0, i)
 
       this.addListeners(elPath, this.radialDataLabels)
 

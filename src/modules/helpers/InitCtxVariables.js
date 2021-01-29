@@ -34,7 +34,9 @@ import '../../assets/apexcharts.css'
 import '../../utils/DetectElementResize'
 
 // global Apex object which user can use to override chart's defaults globally
-window.Apex = {}
+if (typeof window.Apex === 'undefined') {
+  window.Apex = {}
+}
 
 export default class InitCtxVariables {
   constructor(ctx) {
@@ -53,6 +55,7 @@ export default class InitCtxVariables {
       'hideSeries',
       'setLocale',
       'resetSeries',
+      'zoomX',
       'toggleDataPointSelection',
       'dataURI',
       'addXaxisAnnotation',

@@ -16,7 +16,7 @@ class Exports {
       return svgData
     }
 
-    // replace second occurence of "xmlns" attribute with "xmlns:xlink" with correct url + add xmlns:svgjs
+    // replace second occurrence of "xmlns" attribute with "xmlns:xlink" with correct url + add xmlns:svgjs
     let nXmlnsSeen = 0
     let result = svgData.replace(
       /xmlns="http:\/\/www.w3.org\/2000\/svg"/g,
@@ -45,11 +45,11 @@ class Exports {
     const w = this.w
 
     // hide some elements to avoid printing them on exported svg
-    const xcrosshairs = w.globals.dom.baseEl.querySelector(
-      '.apexcharts-xcrosshairs'
+    const xcrosshairs = w.globals.dom.baseEl.getElementsByClassName(
+      'apexcharts-xcrosshairs'
     )
-    const ycrosshairs = w.globals.dom.baseEl.querySelector(
-      '.apexcharts-ycrosshairs'
+    const ycrosshairs = w.globals.dom.baseEl.getElementsByClassName(
+      'apexcharts-ycrosshairs'
     )
     const zoomSelectionRects = w.globals.dom.baseEl.querySelectorAll(
       '.apexcharts-zoom-rect, .apexcharts-selection-rect'
@@ -57,15 +57,15 @@ class Exports {
     Array.prototype.forEach.call(zoomSelectionRects, (z) => {
       z.setAttribute('width', 0)
     })
-    if (xcrosshairs) {
-      xcrosshairs.setAttribute('x', -500)
-      xcrosshairs.setAttribute('x1', -500)
-      xcrosshairs.setAttribute('x2', -500)
+    if (xcrosshairs && xcrosshairs[0]) {
+      xcrosshairs[0].setAttribute('x', -500)
+      xcrosshairs[0].setAttribute('x1', -500)
+      xcrosshairs[0].setAttribute('x2', -500)
     }
-    if (ycrosshairs) {
-      ycrosshairs.setAttribute('y', -100)
-      ycrosshairs.setAttribute('y1', -100)
-      ycrosshairs.setAttribute('y2', -100)
+    if (ycrosshairs && ycrosshairs[0]) {
+      ycrosshairs[0].setAttribute('y', -100)
+      ycrosshairs[0].setAttribute('y1', -100)
+      ycrosshairs[0].setAttribute('y2', -100)
     }
   }
 
@@ -136,7 +136,11 @@ class Exports {
   }
 
   exportToSVG() {
-    this.triggerDownload(this.svgUrl(), '.svg')
+    this.triggerDownload(
+      this.svgUrl(),
+      this.w.config.chart.toolbar.export.svg.filename,
+      '.svg'
+    )
   }
 
   exportToPng() {
@@ -144,18 +148,25 @@ class Exports {
       if (blob) {
         navigator.msSaveOrOpenBlob(blob, this.w.globals.chartID + '.png')
       } else {
-        this.triggerDownload(imgURI, '.png')
+        this.triggerDownload(
+          imgURI,
+          this.w.config.chart.toolbar.export.png.filename,
+          '.png'
+        )
       }
     })
   }
 
-  exportToCSV({ series, columnDelimiter = ',', lineDelimiter = '\n' }) {
+  exportToCSV({ series, columnDelimiter, lineDelimiter = '\n' }) {
     const w = this.w
 
     let columns = []
     let rows = []
     let result = 'data:text/csv;charset=utf-8,'
 
+    const isTimeStamp = (num) => {
+      return w.config.xaxis.type === 'datetime' && String(num).length >= 10
+    }
     const dataFormat = new Data(this.ctx)
 
     const axesUtils = new AxesUtils(this.ctx)
@@ -203,11 +214,11 @@ class Exports {
         }
       }
 
-      return cat
+      return Utils.isNumber(cat) ? cat : cat.split(columnDelimiter).join('')
     }
 
     const handleAxisRowsColumns = (s, sI) => {
-      if (columns.length) {
+      if (columns.length && sI === 0) {
         rows.push(columns.join(columnDelimiter))
       }
 
@@ -225,7 +236,11 @@ class Exports {
           }
 
           if (sI === 0) {
-            columns.push(cat)
+            columns.push(
+              isTimeStamp(cat)
+                ? w.config.chart.toolbar.export.csv.dateFormatter(cat)
+                : cat.split(columnDelimiter).join('')
+            )
 
             for (let ci = 0; ci < w.globals.series.length; ci++) {
               columns.push(w.globals.series[ci][i])
@@ -255,15 +270,20 @@ class Exports {
       }
     }
 
-    columns.push('category')
+    columns.push(w.config.chart.toolbar.export.csv.headerCategory)
     series.map((s, sI) => {
+      const sname = s.name ? s.name : `series-${sI}`
       if (w.globals.axisCharts) {
-        columns.push(s.name ? s.name : `series-${sI}`)
+        columns.push(
+          sname.split(columnDelimiter).join('')
+            ? sname.split(columnDelimiter).join('')
+            : `series-${sI}`
+        )
       }
     })
 
     if (!w.globals.axisCharts) {
-      columns.push('value')
+      columns.push(w.config.chart.toolbar.export.csv.headerValue)
       rows.push(columns.join(columnDelimiter))
     }
     series.map((s, sI) => {
@@ -272,7 +292,7 @@ class Exports {
       } else {
         columns = []
 
-        columns.push(w.globals.labels[sI])
+        columns.push(w.globals.labels[sI].split(columnDelimiter).join(''))
         columns.push(w.globals.series[sI])
         rows.push(columns.join(columnDelimiter))
       }
@@ -280,13 +300,17 @@ class Exports {
 
     result += rows.join(lineDelimiter)
 
-    this.triggerDownload(encodeURI(result), '.csv')
+    this.triggerDownload(
+      encodeURI(result),
+      w.config.chart.toolbar.export.csv.filename,
+      '.csv'
+    )
   }
 
-  triggerDownload(href, ext) {
+  triggerDownload(href, filename, ext) {
     const downloadLink = document.createElement('a')
     downloadLink.href = href
-    downloadLink.download = this.w.globals.chartID + ext
+    downloadLink.download = (filename ? filename : this.w.globals.chartID) + ext
     document.body.appendChild(downloadLink)
     downloadLink.click()
     document.body.removeChild(downloadLink)

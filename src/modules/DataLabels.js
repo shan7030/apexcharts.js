@@ -88,7 +88,7 @@ class DataLabels {
 
     let elDataLabelsWrap = null
 
-    if (!dataLabelsConfig.enabled || pos.x instanceof Array !== true) {
+    if (!dataLabelsConfig.enabled || !Array.isArray(pos.x)) {
       return elDataLabelsWrap
     }
 
@@ -162,6 +162,7 @@ class DataLabels {
       j,
       text,
       textAnchor,
+      fontSize,
       parent,
       dataLabelsConfig,
       color,
@@ -201,13 +202,14 @@ class DataLabels {
     }
 
     if (correctedLabels.textRects) {
-      if (
-        x + correctedLabels.textRects.width < -20 ||
-        x > w.globals.gridWidth + 20
-      ) {
-        // datalabels fall outside drawing area, so draw a blank label
-        text = ''
-      }
+      // commented below code as it hides labels for first and last label even though it is not cut
+      // if (
+      //   x + correctedLabels.textRects.width < -20 ||
+      //   x > w.globals.gridWidth + 20
+      // ) {
+      //   // datalabels fall outside drawing area, so draw a blank label
+      //   text = ''
+      // }
     }
 
     let dataLabelColor = w.globals.dataLabels.style.colors[i]
@@ -218,20 +220,39 @@ class DataLabels {
     ) {
       dataLabelColor = w.globals.dataLabels.style.colors[j]
     }
+    if (typeof dataLabelColor === 'function') {
+      dataLabelColor = dataLabelColor({
+        series: w.globals.series,
+        seriesIndex: i,
+        dataPointIndex: j,
+        w
+      })
+    }
     if (color) {
       dataLabelColor = color
+    }
+
+    let offX = dataLabelsConfig.offsetX
+    let offY = dataLabelsConfig.offsetY
+
+    if (w.config.chart.type === 'bar' || w.config.chart.type === 'rangeBar') {
+      // for certain chart types, we handle offsets while calculating datalabels pos
+      // why? because bars/column may have negative values and based on that
+      // offsets becomes reversed
+      offX = 0
+      offY = 0
     }
 
     if (correctedLabels.drawnextLabel) {
       let dataLabelText = graphics.drawText({
         width: 100,
         height: parseInt(dataLabelsConfig.style.fontSize, 10),
-        x: x + dataLabelsConfig.offsetX,
-        y: y + dataLabelsConfig.offsetY,
+        x: x + offX,
+        y: y + offY,
         foreColor: dataLabelColor,
         textAnchor: textAnchor || dataLabelsConfig.textAnchor,
         text,
-        fontSize: dataLabelsConfig.style.fontSize,
+        fontSize: fontSize || dataLabelsConfig.style.fontSize,
         fontFamily: dataLabelsConfig.style.fontFamily,
         fontWeight: dataLabelsConfig.style.fontWeight || 'normal'
       })
@@ -332,6 +353,7 @@ class DataLabels {
     const elDataLabelsNodes = w.globals.dom.baseEl.querySelectorAll(
       '.apexcharts-datalabels'
     )
+
     const elSeries = w.globals.dom.baseEl.querySelector(
       '.apexcharts-plot-series:last-child'
     )

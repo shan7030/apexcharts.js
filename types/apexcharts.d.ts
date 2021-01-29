@@ -25,10 +25,12 @@ declare class ApexCharts {
     newSeries: ApexAxisChartSeries | ApexNonAxisChartSeries,
     animate?: boolean
   ): void
+  appendData(data: any[], overwriteInitialSeries?: boolean): void
   toggleSeries(seriesName: string): any
   showSeries(seriesName: string): void
   hideSeries(seriesName: string): void
   resetSeries(): void
+  zoomX(min: number, max: number): void
   toggleDataPointSelection(seriesIndex: number, dataPointIndex?: number): any
   destroy(): void
   setLocale(localeName: string): void
@@ -98,7 +100,9 @@ type ApexChart = {
     | 'heatmap'
     | 'candlestick'
     | 'radar'
+    | 'polarArea'
     | 'rangeBar'
+    | 'treemap'
   foreColor?: string
   fontFamily?: string
   background?: string
@@ -122,8 +126,10 @@ type ApexChart = {
     dataPointMouseEnter?(e: any, chart?: any, options?: any): void
     dataPointMouseLeave?(e: any, chart?: any, options?: any): void
     beforeZoom?(chart: any, options?: any): void
+    beforeResetZoom?(chart: any, options?: any): void
     zoomed?(chart: any, options?: any): void
     scrolled?(chart: any, options?: any): void
+    brushScrolled?(chart: any, options?: any): void
   }
   brush?: {
     enabled?: boolean
@@ -136,6 +142,7 @@ type ApexChart = {
   defaultLocale?: string
   parentHeightOffset?: number
   redrawOnParentResize?: boolean
+  redrawOnWindowResize?: boolean | Function
   sparkline?: {
     enabled?: boolean
   }
@@ -157,7 +164,24 @@ type ApexChart = {
         icon?: string
         title?: string
         index?: number
+        class?: string
+        click?(chart?: any, options?: any, e?: any): any
       }[]
+    }
+    export?: {
+      csv?: {
+        filename?: undefined | string
+        columnDelimiter?: string
+        headerCategory?: string
+        headerValue?: string
+        dateFormatter?(timestamp?: number): any
+      },
+      svg?: {
+        filename?: undefined | string
+      }
+      png?: {
+        filename?: undefined | string
+      }
     }
     autoSelected?: 'zoom' | 'selection' | 'pan'
   }
@@ -272,6 +296,7 @@ type ApexTitleSubtitle = {
 type ApexAxisChartSeries = {
   name?: string
   type?: string
+  color?: string
   data:
     | (number | null)[]
     | { x: any; y: any, fillColor?: string, strokeColor?: string }[]
@@ -287,7 +312,7 @@ type ApexNonAxisChartSeries = number[]
  */
 type ApexStroke = {
   show?: boolean
-  curve?: 'smooth' | 'straight' | 'stepline'
+  curve?: 'smooth' | 'straight' | 'stepline' | ('smooth' | 'straight' | 'stepline')[]
   lineCap?: 'butt' | 'square' | 'round'
   colors?: string[]
   width?: number | number[]
@@ -299,7 +324,6 @@ type ApexAnnotations = {
   yaxis?: YAxisAnnotations[]
   xaxis?: XAxisAnnotations[]
   points?: PointAnnotations[]
-  shapes?: ShapeAnnotations[]
   texts?: TextAnnotations[]
   images?: ImageAnnotations[]
 }
@@ -307,6 +331,7 @@ type ApexAnnotations = {
 type AnnotationLabel = {
   borderColor?: string
   borderWidth?: number
+  borderRadius?: number
   text?: string
   textAnchor?: string
   offsetX?: number
@@ -354,6 +379,7 @@ type YAxisAnnotations = {
   opacity?: number
   offsetX?: number
   offsetY?: number
+  width?: number | string
   yAxisIndex?: number
   label?: AnnotationLabel
 }
@@ -384,18 +410,6 @@ type PointAnnotations = {
   }
 }
 
-type ShapeAnnotations = {
-  x?: number
-  y?: number
-  type?: string
-  width?: number | string
-  height?: number
-  backgroundColor?: string
-  opacity?: number
-  borderWidth?: number
-  borderRadius?: number
-  borderColor?: string
-}
 
 type TextAnnotations = {
   x?: number
@@ -452,12 +466,18 @@ type ApexLocale = {
  * See https://apexcharts.com/docs/options/plotoptions/bar/
  */
 type ApexPlotOptions = {
+  area?: {
+    fillTo?: 'origin' | 'end'
+  }
   bar?: {
     horizontal?: boolean
     endingShape?: 'flat' | 'rounded'
+    startingShape?: 'flat' | 'rounded'
     columnWidth?: string
     barHeight?: string
     distributed?: boolean
+    rangeBarOverlap?: boolean
+    rangeBarGroupRows?: boolean
     colors?: {
       ranges?: {
         from?: number
@@ -466,6 +486,7 @@ type ApexPlotOptions = {
       }[]
       backgroundBarColors?: string[]
       backgroundBarOpacity?: number
+      backgroundBarRadius?: number
     }
     dataLabels?: {
       maxItems?: number
@@ -493,6 +514,7 @@ type ApexPlotOptions = {
     shadeIntensity?: number
     reverseNegativeShade?: boolean
     distributed?: boolean
+    useFillColorAsStroke?: boolean
     colorScale?: {
       ranges?: {
         from?: number
@@ -506,7 +528,28 @@ type ApexPlotOptions = {
       max?: number
     }
   }
+  treemap?: {
+    enableShades?: boolean
+    shadeIntensity?: number
+    distributed?: boolean
+    reverseNegativeShade?: boolean
+    useFillColorAsStroke?: boolean
+    colorScale?: {
+      inverse?: boolean
+      ranges?: {
+        from?: number
+        to?: number
+        color?: string
+        foreColor?: string
+        name?: string
+      }[];
+      min?: number
+      max?: number
+    };
+  }
   pie?: {
+    startAngle?: number
+    endAngle?: number
     customScale?: number
     offsetX?: number
     offsetY?: number
@@ -551,12 +594,19 @@ type ApexPlotOptions = {
       }
     }
   }
+  polarArea?: {
+    rings?: {
+      strokeWidth?: number
+      strokeColor?: string
+    }
+  }
   radar?: {
     size?: number
     offsetX?: number
     offsetY?: number
     polygons?: {
-      strokeColor?: string | string[]
+      strokeColors?: string | string[]
+      strokeWidth?: string | string[]
       connectorColors?: string | string[]
       fill?: {
         colors?: string[]
@@ -777,7 +827,7 @@ type ApexDataLabels = {
     dropShadow: ApexDropShadow
   }
   dropShadow?: ApexDropShadow
-  formatter?(val: number, opts?: any): string
+  formatter?(val: number, opts?: any): string | number
 }
 
 type ApexResponsive = {
@@ -845,6 +895,9 @@ type ApexTooltip = {
 type ApexXAxis = {
   type?: 'category' | 'datetime' | 'numeric'
   categories?: any;
+  offsetX?: number;
+  offsetY?: number;
+  sorted?: boolean;
   labels?: {
     show?: boolean
     rotate?: number
@@ -864,7 +917,7 @@ type ApexXAxis = {
     offsetX?: number
     offsetY?: number
     format?: string
-    formatter?(value: string, timestamp?: number): string | string[]
+    formatter?(value: string, timestamp?: number, opts?:any): string | string[]
     datetimeUTC?: boolean
     datetimeFormatter?: {
       year?: string

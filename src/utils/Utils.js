@@ -94,6 +94,11 @@ class Utils {
         cloneResult[i] = this.clone(source[i])
       }
       return cloneResult
+    } else if (Object.prototype.toString.call(source) === '[object Null]') {
+      // fixes an issue where null values were converted to {}
+      return null
+    } else if (Object.prototype.toString.call(source) === '[object Date]') {
+      return source
     } else if (typeof source === 'object') {
       let cloneResult = {}
       for (let prop in source) {
@@ -125,7 +130,7 @@ class Utils {
   }
 
   static randomId() {
-    return (new Date() % 9e6).toString(16)
+    return (Math.random() + 1).toString(36).substring(4)
   }
 
   static noExponents(val) {
@@ -148,22 +153,18 @@ class Utils {
   }
 
   static getDimensions(el) {
-    let computedStyle = getComputedStyle(el)
-    let ret = []
+    const computedStyle = getComputedStyle(el, null)
 
     let elementHeight = el.clientHeight
     let elementWidth = el.clientWidth
-
     elementHeight -=
       parseFloat(computedStyle.paddingTop) +
       parseFloat(computedStyle.paddingBottom)
     elementWidth -=
       parseFloat(computedStyle.paddingLeft) +
       parseFloat(computedStyle.paddingRight)
-    ret.push(elementWidth)
-    ret.push(elementHeight)
 
-    return ret
+    return [elementWidth, elementHeight]
   }
 
   static getBoundingClientRect(element) {
@@ -173,10 +174,10 @@ class Utils {
       right: rect.right,
       bottom: rect.bottom,
       left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      x: rect.x,
-      y: rect.y
+      width: element.clientWidth,
+      height: element.clientHeight,
+      x: rect.left,
+      y: rect.top
     }
   }
 
@@ -208,10 +209,7 @@ class Utils {
   }
 
   static getOpacityFromRGBA(rgba) {
-    rgba = rgba.match(
-      /^rgba?[\s+]?\([\s+]?(\d+)[\s+]?,[\s+]?(\d+)[\s+]?,[\s+]?(\d+)[\s+]?/i
-    )
-    return rgba[3]
+    return parseFloat(rgba.replace(/^.*,(.+)\)/, '$1'))
   }
 
   static rgb2hex(rgb) {
@@ -267,12 +265,27 @@ class Utils {
   // beautiful color shading blending code
   // http://stackoverflow.com/questions/5560248/programmatically-lighten-or-darken-a-hex-color-or-rgb-and-blend-colors
   shadeColor(p, color) {
-    if (color.length > 7) return this.shadeRGBColor(p, color)
-    else return this.shadeHexColor(p, color)
+    if (Utils.isColorHex(color)) {
+      return this.shadeHexColor(p, color)
+    } else {
+      return this.shadeRGBColor(p, color)
+    }
   }
 
   static isColorHex(color) {
-    return /(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i.test(color)
+    return /(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)|(^#[0-9A-F]{8}$)/i.test(color)
+  }
+
+  static getPolygonPos(size, dataPointsLen) {
+    let dotsArray = []
+    let angle = (Math.PI * 2) / dataPointsLen
+    for (let i = 0; i < dataPointsLen; i++) {
+      let curPos = {}
+      curPos.x = size * Math.sin(i * angle)
+      curPos.y = -size * Math.cos(i * angle)
+      dotsArray.push(curPos)
+    }
+    return dotsArray
   }
 
   static polarToCartesian(centerX, centerY, radius, angleInDegrees) {
@@ -378,6 +391,19 @@ class Utils {
 
     // other browser
     return false
+  }
+
+  /**
+   * Sanitize dangerous characters in the string to prevent Cross-Site Scripting
+   * @param {string}
+   * string - String to sanitize
+   */
+  static sanitizeDom(string) {
+    return string
+      .replace(/\&/g, '&amp;')
+      .replace(/\</g, '&lt;')
+      .replace(/\>/g, '&gt;')
+      .replace(/\"/g, '&quot;')
   }
 }
 

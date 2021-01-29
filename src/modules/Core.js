@@ -11,6 +11,7 @@ import Radial from '../charts/Radial'
 import RangeBar from '../charts/RangeBar'
 import Legend from './legend/Legend'
 import Line from '../charts/Line'
+import Treemap from '../charts/Treemap'
 import Graphics from './Graphics'
 import Range from './Range'
 import Utils from '../utils/Utils'
@@ -48,7 +49,8 @@ export default class Core {
       'scatter',
       'bubble',
       'radar',
-      'heatmap'
+      'heatmap',
+      'treemap'
     ]
 
     let xyChartsArrTypes = [
@@ -69,7 +71,7 @@ export default class Core {
       (cnf.chart.type === 'bar' || cnf.chart.type === 'rangeBar') &&
       cnf.plotOptions.bar.horizontal
 
-    gl.chartClass = '.apexcharts' + gl.cuid
+    gl.chartClass = '.apexcharts' + gl.chartID
 
     gl.dom.baseEl = this.el
 
@@ -172,7 +174,7 @@ export default class Core {
         } else {
           // user has specified type, but it is not valid (other than line/area/column)
           console.warn(
-            'You have specified an unrecognized chart type. Available types for this propery are line/area/column/bar/scatter/bubble'
+            'You have specified an unrecognized chart type. Available types for this property are line/area/column/bar/scatter/bubble'
           )
         }
         gl.comboCharts = true
@@ -184,9 +186,9 @@ export default class Core {
 
     let line = new Line(this.ctx, xyRatios)
     let candlestick = new CandleStick(this.ctx, xyRatios)
-    let pie = new Pie(this.ctx)
+    this.ctx.pie = new Pie(this.ctx)
     let radialBar = new Radial(this.ctx)
-    let rangeBar = new RangeBar(this.ctx, xyRatios)
+    this.ctx.rangeBar = new RangeBar(this.ctx, xyRatios)
     let radar = new Radar(this.ctx)
     let elGraph = []
 
@@ -199,8 +201,8 @@ export default class Core {
           let barStacked = new BarStacked(this.ctx, xyRatios)
           elGraph.push(barStacked.draw(columnSeries.series, columnSeries.i))
         } else {
-          let bar = new Bar(this.ctx, xyRatios)
-          elGraph.push(bar.draw(columnSeries.series, columnSeries.i))
+          this.ctx.bar = new Bar(this.ctx, xyRatios)
+          elGraph.push(this.ctx.bar.draw(columnSeries.series, columnSeries.i))
         }
       }
       if (lineSeries.series.length > 0) {
@@ -236,8 +238,8 @@ export default class Core {
             let barStacked = new BarStacked(this.ctx, xyRatios)
             elGraph = barStacked.draw(gl.series)
           } else {
-            let bar = new Bar(this.ctx, xyRatios)
-            elGraph = bar.draw(gl.series)
+            this.ctx.bar = new Bar(this.ctx, xyRatios)
+            elGraph = this.ctx.bar.draw(gl.series)
           }
           break
         case 'candlestick':
@@ -245,15 +247,20 @@ export default class Core {
           elGraph = candleStick.draw(gl.series)
           break
         case 'rangeBar':
-          elGraph = rangeBar.draw(gl.series)
+          elGraph = this.ctx.rangeBar.draw(gl.series)
           break
         case 'heatmap':
           let heatmap = new HeatMap(this.ctx, xyRatios)
           elGraph = heatmap.draw(gl.series)
           break
+        case 'treemap':
+          let treemap = new Treemap(this.ctx, xyRatios)
+          elGraph = treemap.draw(gl.series)
+          break
         case 'pie':
         case 'donut':
-          elGraph = pie.draw(gl.series)
+        case 'polarArea':
+          elGraph = this.ctx.pie.draw(gl.series)
           break
         case 'radialBar':
           elGraph = radialBar.draw(gl.series)
@@ -295,11 +302,11 @@ export default class Core {
       gl.svgWidth = parseInt(cnf.chart.width, 10)
     }
 
+    let heightUnit = cnf.chart.height
+      .toString()
+      .split(/[0-9]+/g)
+      .pop()
     if (gl.svgHeight !== 'auto' && gl.svgHeight !== '') {
-      let heightUnit = cnf.chart.height
-        .toString()
-        .split(/[0-9]+/g)
-        .pop()
       if (heightUnit === '%') {
         let elParentDim = Utils.getDimensions(this.el.parentNode)
         gl.svgHeight = (elParentDim[1] * parseInt(cnf.chart.height, 10)) / 100
@@ -322,15 +329,17 @@ export default class Core {
       height: gl.svgHeight
     })
 
-    // gl.dom.Paper.node.parentNode.parentNode.style.minWidth = gl.svgWidth + "px";
-    let offsetY = cnf.chart.sparkline.enabled
-      ? 0
-      : gl.axisCharts
-      ? cnf.chart.parentHeightOffset
-      : 0
+    if (heightUnit !== '%') {
+      // fixes https://github.com/apexcharts/apexcharts.js/issues/2059
+      let offsetY = cnf.chart.sparkline.enabled
+        ? 0
+        : gl.axisCharts
+        ? cnf.chart.parentHeightOffset
+        : 0
 
-    gl.dom.Paper.node.parentNode.parentNode.style.minHeight =
-      gl.svgHeight + offsetY + 'px'
+      gl.dom.Paper.node.parentNode.parentNode.style.minHeight =
+        gl.svgHeight + offsetY + 'px'
+    }
 
     gl.dom.elWrap.style.width = gl.svgWidth + 'px'
     gl.dom.elWrap.style.height = gl.svgHeight + 'px'
@@ -346,8 +355,6 @@ export default class Core {
       transform: 'translate(' + tX + ', ' + tY + ')'
     }
     Graphics.setAttrs(gl.dom.elGraphical.node, scalingAttrs)
-
-    gl.x2SpaceAvailable = gl.svgWidth - gl.dom.elGraphical.x() - gl.gridWidth
   }
 
   // To prevent extra spacings in the bottom of the chart, we need to recalculate the height for pie/donut/radialbar charts
@@ -370,12 +377,14 @@ export default class Core {
         new Legend(this.ctx).legendHelpers.getLegendBBox().clwh + 10
     }
 
-    let radialEl = w.globals.dom.baseEl.querySelector('.apexcharts-radialbar')
+    let el = w.globals.dom.baseEl.querySelector(
+      '.apexcharts-radialbar, .apexcharts-pie'
+    )
 
     let chartInnerDimensions = w.globals.radialSize * 2.05
 
-    if (radialEl && !w.config.chart.sparkline.enabled) {
-      let elRadialRect = Utils.getBoundingClientRect(radialEl)
+    if (el && !w.config.chart.sparkline.enabled) {
+      let elRadialRect = Utils.getBoundingClientRect(el)
       chartInnerDimensions = elRadialRect.bottom
 
       let maxHeight = elRadialRect.bottom - elRadialRect.top
@@ -447,30 +456,48 @@ export default class Core {
         w.config.xaxis.type === 'datetime' &&
         w.config.xaxis.labels.formatter === undefined
       ) {
-        let ts = new TimeScale(this.ctx)
+        this.ctx.timeScale = new TimeScale(this.ctx)
         let formattedTimeScale = []
         if (
           isFinite(w.globals.minX) &&
           isFinite(w.globals.maxX) &&
           !w.globals.isBarHorizontal
         ) {
-          formattedTimeScale = ts.calculateTimeScaleTicks(
+          formattedTimeScale = this.ctx.timeScale.calculateTimeScaleTicks(
             w.globals.minX,
             w.globals.maxX
           )
         } else if (w.globals.isBarHorizontal) {
-          formattedTimeScale = ts.calculateTimeScaleTicks(
+          formattedTimeScale = this.ctx.timeScale.calculateTimeScaleTicks(
             w.globals.minY,
             w.globals.maxY
           )
         }
-        ts.recalcDimensionsBasedOnFormat(formattedTimeScale)
+        this.ctx.timeScale.recalcDimensionsBasedOnFormat(formattedTimeScale)
       }
 
       const coreUtils = new CoreUtils(this.ctx)
       xyRatios = coreUtils.getCalculatedRatios()
     }
     return xyRatios
+  }
+
+  updateSourceChart(targetChart) {
+    this.ctx.w.globals.selection = undefined
+    this.ctx.updateHelpers._updateOptions(
+      {
+        chart: {
+          selection: {
+            xaxis: {
+              min: targetChart.w.globals.minX,
+              max: targetChart.w.globals.maxX
+            }
+          }
+        }
+      },
+      false,
+      false
+    )
   }
 
   setupBrushHandler() {
@@ -492,30 +519,14 @@ export default class Core {
         let targetChart = ApexCharts.getChartByID(target)
         targetChart.w.globals.brushSource = this.ctx
 
-        let updateSourceChart = () => {
-          this.ctx.updateHelpers._updateOptions(
-            {
-              chart: {
-                selection: {
-                  xaxis: {
-                    min: targetChart.w.globals.minX,
-                    max: targetChart.w.globals.maxX
-                  }
-                }
-              }
-            },
-            false,
-            false
-          )
-        }
         if (typeof targetChart.w.config.chart.events.zoomed !== 'function') {
           targetChart.w.config.chart.events.zoomed = () => {
-            updateSourceChart()
+            this.updateSourceChart(targetChart)
           }
         }
         if (typeof targetChart.w.config.chart.events.scrolled !== 'function') {
           targetChart.w.config.chart.events.scrolled = () => {
-            updateSourceChart()
+            this.updateSourceChart(targetChart)
           }
         }
       })
@@ -532,17 +543,28 @@ export default class Core {
             const scale = new Scales(targetChart)
             yaxis = scale.autoScaleY(targetChart, yaxis, e)
           }
+
+          const multipleYaxis = targetChart.w.config.yaxis.reduce(
+            (acc, curr, index) => {
+              return [
+                ...acc,
+                {
+                  ...targetChart.w.config.yaxis[index],
+                  min: yaxis[0].min,
+                  max: yaxis[0].max
+                }
+              ]
+            },
+            []
+          )
+
           targetChart.ctx.updateHelpers._updateOptions(
             {
               xaxis: {
                 min: e.xaxis.min,
                 max: e.xaxis.max
               },
-              yaxis: {
-                ...targetChart.w.config.yaxis[0],
-                min: yaxis[0].min,
-                max: yaxis[0].max
-              }
+              yaxis: multipleYaxis
             },
             false,
             false,

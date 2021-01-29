@@ -1,6 +1,6 @@
-import Utils from '../utils/Utils'
-import Filters from './Filters'
 import Animations from './Animations'
+import Filters from './Filters'
+import Utils from '../utils/Utils'
 
 /**
  * ApexCharts Graphics Class for all drawing operations.
@@ -59,21 +59,29 @@ class Graphics {
       height: y2 > 0 ? y2 : 0,
       rx: radius,
       ry: radius,
-      fill: color,
       opacity,
       'stroke-width': strokeWidth !== null ? strokeWidth : 0,
       stroke: strokeColor !== null ? strokeColor : 'none',
       'stroke-dasharray': strokeDashArray
     })
 
+    // fix apexcharts.js#1410
+    rect.node.setAttribute('fill', color)
+
     return rect
   }
 
-  drawPolygon(polygonString, stroke = '#e1e1e1', fill = 'none') {
+  drawPolygon(
+    polygonString,
+    stroke = '#e1e1e1',
+    strokeWidth = 1,
+    fill = 'none'
+  ) {
     const w = this.w
     const polygon = w.globals.dom.Paper.polygon(polygonString).attr({
       fill,
-      stroke
+      stroke,
+      'stroke-width': strokeWidth
     })
 
     return polygon
@@ -297,6 +305,7 @@ class Graphics {
     } else {
       if (w.globals.resized || !w.globals.dataChanged) {
         anim.showDelayedElements()
+        anim.roundedCornerBars(el, realIndex)
       }
     }
 
@@ -363,8 +372,13 @@ class Graphics {
     let w = this.w
     let g
 
-    gfrom = Utils.hexToRgba(gfrom, opacityFrom)
-    gto = Utils.hexToRgba(gto, opacityTo)
+    if (gfrom.length < 9 && gfrom.indexOf('#') === 0) {
+      // if the hex contains alpha and is of 9 digit, skip the opacity
+      gfrom = Utils.hexToRgba(gfrom, opacityFrom)
+    }
+    if (gto.length < 9 && gto.indexOf('#') === 0) {
+      gto = Utils.hexToRgba(gto, opacityTo)
+    }
 
     let stop1 = 0
     let stop2 = 1
@@ -381,6 +395,7 @@ class Graphics {
     let radial = !!(
       w.config.chart.type === 'donut' ||
       w.config.chart.type === 'pie' ||
+      w.config.chart.type === 'polarArea' ||
       w.config.chart.type === 'bubble'
     )
 
@@ -760,9 +775,9 @@ class Graphics {
     textObj.textContent = textString
     if (textString.length > 0) {
       // ellipsis is needed
-      if (textObj.getComputedTextLength() >= width / 0.8) {
+      if (textObj.getComputedTextLength() >= width) {
         for (let x = textString.length - 3; x > 0; x -= 3) {
-          if (textObj.getSubStringLength(0, x) <= width / 0.8) {
+          if (textObj.getSubStringLength(0, x) <= width) {
             textObj.textContent = textString.substring(0, x) + '...'
             return
           }

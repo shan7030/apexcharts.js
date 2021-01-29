@@ -75,7 +75,8 @@ export default class Position {
         y1: cy,
         y2: cy
       })
-
+    }
+    if (ttCtx.ycrosshairsHidden !== null) {
       Graphics.setAttrs(ttCtx.ycrosshairsHidden, {
         y1: cy,
         y2: cy
@@ -273,7 +274,7 @@ export default class Position {
       `.apexcharts-series[data\\:realIndex='${capturedSeries}'] .apexcharts-series-markers circle`
     )
 
-    if (point) {
+    if (point && cy < w.globals.gridHeight && cy > 0) {
       point.setAttribute('r', hoverSize)
 
       point.setAttribute('cx', cx)
@@ -310,16 +311,7 @@ export default class Position {
       cy = pointsArr[activeSeries][j][1]
     }
 
-    let points = null
-    const allPoints = ttCtx.tooltipUtil.getAllMarkers()
-
-    if (allPoints !== null) {
-      points = allPoints
-    } else {
-      points = w.globals.dom.baseEl.querySelectorAll(
-        '.apexcharts-series-markers circle'
-      )
-    }
+    let points = ttCtx.tooltipUtil.getAllMarkers()
 
     if (points !== null) {
       for (let p = 0; p < w.globals.series.length; p++) {
@@ -329,25 +321,23 @@ export default class Position {
           // in a combo chart, if column charts are present, markers will not match with the number of series, hence this patch to push a null value in points array
           if (typeof pointArr === 'undefined') {
             // nodelist to array
-            points = [...points]
             points.splice(p, 0, null)
           }
         }
         if (pointArr && pointArr.length) {
           let pcy = pointsArr[p][j][1]
           points[p].setAttribute('cx', cx)
-          let realIndex = parseInt(
-            points[p].parentNode.parentNode.parentNode.getAttribute(
-              'data:realIndex'
-            ),
-            10
-          )
 
-          if (pcy !== null && !isNaN(pcy)) {
-            points[realIndex] && points[realIndex].setAttribute('r', hoverSize)
-            points[realIndex] && points[realIndex].setAttribute('cy', pcy)
+          if (
+            pcy !== null &&
+            !isNaN(pcy) &&
+            pcy < w.globals.gridHeight &&
+            pcy > 0
+          ) {
+            points[p] && points[p].setAttribute('r', hoverSize)
+            points[p] && points[p].setAttribute('cy', pcy)
           } else {
-            points[realIndex] && points[realIndex].setAttribute('r', 0)
+            points[p] && points[p].setAttribute('r', 0)
           }
         }
       }

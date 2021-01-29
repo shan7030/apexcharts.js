@@ -2,7 +2,7 @@ import Graphics from './Graphics'
 import Utils from '../utils/Utils'
 
 /**
- * ApexCharts Series Class for interation with the Series of the chart.
+ * ApexCharts Series Class for interaction with the Series of the chart.
  *
  * @module Series
  **/
@@ -16,12 +16,14 @@ export default class Series {
   }
 
   getAllSeriesEls() {
-    return this.w.globals.dom.baseEl.querySelectorAll(`.apexcharts-series`)
+    return this.w.globals.dom.baseEl.getElementsByClassName(`apexcharts-series`)
   }
 
   getSeriesByName(seriesName) {
     return this.w.globals.dom.baseEl.querySelector(
-      `[seriesName='${Utils.escapeString(seriesName)}']`
+      `.apexcharts-inner .apexcharts-series[seriesName='${Utils.escapeString(
+        seriesName
+      )}']`
     )
   }
 
@@ -89,8 +91,7 @@ export default class Series {
   ) {
     const w = this.w
 
-    let series = w.globals.initialSeries.slice()
-    w.config.series = series
+    let series = Utils.clone(w.globals.initialSeries)
 
     w.globals.previousPaths = []
 
@@ -99,7 +100,11 @@ export default class Series {
       w.globals.ancillaryCollapsedSeries = []
       w.globals.collapsedSeriesIndices = []
       w.globals.ancillaryCollapsedSeriesIndices = []
+    } else {
+      series = this.emptyCollapsedSeries(series)
     }
+
+    w.config.series = series
 
     if (shouldUpdateChart) {
       if (shouldResetZoom) {
@@ -113,6 +118,15 @@ export default class Series {
     }
   }
 
+  emptyCollapsedSeries(series) {
+    const w = this.w
+    for (let i = 0; i < series.length; i++) {
+      if (w.globals.collapsedSeriesIndices.indexOf(i) > -1) {
+        series[i].data = []
+      }
+    }
+    return series
+  }
   toggleSeriesOnHover(e, targetElement) {
     const w = this.w
 
@@ -167,8 +181,8 @@ export default class Series {
 
   highlightRangeInSeries(e, targetElement) {
     const w = this.w
-    const allHeatMapElements = w.globals.dom.baseEl.querySelectorAll(
-      '.apexcharts-heatmap-rect'
+    const allHeatMapElements = w.globals.dom.baseEl.getElementsByClassName(
+      'apexcharts-heatmap-rect'
     )
 
     const activeInactive = (action) => {
@@ -256,7 +270,14 @@ export default class Series {
       )
     }
 
-    const chartTypes = ['line', 'area', 'bar', 'candlestick', 'radar']
+    const chartTypes = [
+      'line',
+      'area',
+      'bar',
+      'rangebar',
+      'candlestick',
+      'radar'
+    ]
     chartTypes.forEach((type) => {
       const paths = getPaths(type)
       for (let p = 0; p < paths.length; p++) {
@@ -267,20 +288,30 @@ export default class Series {
     this.handlePrevBubbleScatterPaths('bubble')
     this.handlePrevBubbleScatterPaths('scatter')
 
-    let heatmapColors = w.globals.dom.baseEl.querySelectorAll(
-      '.apexcharts-heatmap .apexcharts-series'
+    let heatTreeSeries = w.globals.dom.baseEl.querySelectorAll(
+      `.apexcharts-${w.config.chart.type} .apexcharts-series`
     )
 
-    if (heatmapColors.length > 0) {
-      for (let h = 0; h < heatmapColors.length; h++) {
+    if (heatTreeSeries.length > 0) {
+      for (let h = 0; h < heatTreeSeries.length; h++) {
         let seriesEls = w.globals.dom.baseEl.querySelectorAll(
-          `.apexcharts-heatmap .apexcharts-series[data\\:realIndex='${h}'] rect`
+          `.apexcharts-${w.config.chart.type} .apexcharts-series[data\\:realIndex='${h}'] rect`
         )
 
         let dArr = []
 
         for (let i = 0; i < seriesEls.length; i++) {
+          const getAttr = (x) => {
+            return seriesEls[i].getAttribute(x)
+          }
+          const rect = {
+            x: parseFloat(getAttr('x')),
+            y: parseFloat(getAttr('y')),
+            width: parseFloat(getAttr('width')),
+            height: parseFloat(getAttr('height'))
+          }
           dArr.push({
+            rect,
             color: seriesEls[i].getAttribute('color')
           })
         }

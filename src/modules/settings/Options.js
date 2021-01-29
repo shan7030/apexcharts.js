@@ -8,7 +8,7 @@ export default class Options {
     this.yAxis = {
       show: true,
       showAlways: false,
-      showForNullSeries: false,
+      showForNullSeries: true,
       seriesName: undefined,
       opposite: false,
       reversed: false,
@@ -53,7 +53,7 @@ export default class Options {
       },
       title: {
         text: undefined,
-        rotate: 90,
+        rotate: -90,
         offsetY: 0,
         offsetX: 0,
         style: {
@@ -98,10 +98,11 @@ export default class Options {
       label: {
         borderColor: '#c2c2c2',
         borderWidth: 1,
+        borderRadius: 2,
         text: undefined,
         textAnchor: 'middle',
         offsetX: 0,
-        offsetY: -15,
+        offsetY: 0,
         style: {
           background: '#fff',
           color: undefined,
@@ -143,10 +144,12 @@ export default class Options {
       opacity: 0.3,
       offsetX: 0,
       offsetY: 0,
+      width: '100%',
       yAxisIndex: 0,
       label: {
         borderColor: '#c2c2c2',
         borderWidth: 1,
+        borderRadius: 2,
         text: undefined,
         textAnchor: 'end',
         position: 'right',
@@ -182,6 +185,7 @@ export default class Options {
       label: {
         borderColor: '#c2c2c2',
         borderWidth: 1,
+        borderRadius: 2,
         text: undefined,
         textAnchor: 'middle',
         orientation: 'vertical',
@@ -214,6 +218,7 @@ export default class Options {
       fontSize: '13px',
       fontFamily: undefined,
       fontWeight: 400,
+      appendTo: '.apexcharts-annotations',
       backgroundColor: 'transparent',
       borderColor: '#c2c2c2',
       borderRadius: 0,
@@ -222,19 +227,6 @@ export default class Options {
       paddingRight: 4,
       paddingTop: 2,
       paddingBottom: 2
-    }
-
-    this.shape = {
-      x: 0,
-      y: 0,
-      type: 'rect',
-      width: '100%', // accepts percentage as well as fixed numbers
-      height: 50,
-      backgroundColor: '#fff',
-      opacity: 1,
-      borderWidth: 0,
-      borderRadius: 4,
-      borderColor: '#c2c2c2'
     }
   }
   init() {
@@ -288,14 +280,17 @@ export default class Options {
           dataPointMouseEnter: undefined,
           dataPointMouseLeave: undefined,
           beforeZoom: undefined,
+          beforeResetZoom: undefined,
           zoomed: undefined,
-          scrolled: undefined
+          scrolled: undefined,
+          brushScrolled: undefined
         },
         foreColor: '#373d3f',
         fontFamily: 'Helvetica, Arial, sans-serif',
         height: 'auto',
         parentHeightOffset: 15,
         redrawOnParentResize: true,
+        redrawOnWindowResize: true,
         id: undefined,
         group: undefined,
         offsetX: 0,
@@ -347,6 +342,23 @@ export default class Options {
             reset: true,
             customIcons: []
           },
+          export: {
+            csv: {
+              filename: undefined,
+              columnDelimiter: ',',
+              headerCategory: 'category',
+              headerValue: 'value',
+              dateFormatter(timestamp) {
+                return new Date(timestamp).toDateString()
+              }
+            },
+            png: {
+              filename: undefined
+            },
+            svg: {
+              filename: undefined
+            }
+          },
           autoSelected: 'zoom' // accepts -> zoom, pan, selection
         },
         type: 'line',
@@ -369,16 +381,25 @@ export default class Options {
         }
       },
       plotOptions: {
+        area: {
+          fillTo: 'origin'
+        },
         bar: {
           horizontal: false,
           columnWidth: '70%', // should be in percent 0 - 100
           barHeight: '70%', // should be in percent 0 - 100
           distributed: false,
+          startingShape: 'flat',
           endingShape: 'flat',
+          borderRadius: 6,
+          radiusOnLastStackedBar: true,
+          rangeBarOverlap: true,
+          rangeBarGroupRows: false,
           colors: {
             ranges: [],
             backgroundBarColors: [],
-            backgroundBarOpacity: 1
+            backgroundBarOpacity: 1,
+            backgroundBarRadius: 0
           },
           dataLabels: {
             position: 'top', // top, center, bottom
@@ -407,6 +428,20 @@ export default class Options {
           shadeIntensity: 0.5,
           reverseNegativeShade: false,
           distributed: false,
+          useFillColorAsStroke: false,
+          colorScale: {
+            inverse: false,
+            ranges: [],
+            min: undefined,
+            max: undefined
+          }
+        },
+        treemap: {
+          enableShades: true,
+          shadeIntensity: 0.5,
+          distributed: false,
+          reverseNegativeShade: false,
+          useFillColorAsStroke: false,
           colorScale: {
             inverse: false,
             ranges: [],
@@ -502,6 +537,8 @@ export default class Options {
           customScale: 1,
           offsetX: 0,
           offsetY: 0,
+          startAngle: 0,
+          endAngle: 360,
           expandOnClick: true,
           dataLabels: {
             // These are the percentage values which are displayed on slice
@@ -551,12 +588,23 @@ export default class Options {
             }
           }
         },
+        polarArea: {
+          rings: {
+            strokeWidth: 1,
+            strokeColor: '#e8e8e8'
+          },
+          spokes: {
+            strokeWidth: 1,
+            connectorColors: '#e8e8e8'
+          }
+        },
         radar: {
           size: undefined,
           offsetX: 0,
           offsetY: 0,
           polygons: {
             // strokeColor: '#e8e8e8', // should be deprecated in the minor version i.e 3.2
+            strokeWidth: 1,
             strokeColors: '#e8e8e8',
             connectorColors: '#e8e8e8',
             fill: {
@@ -684,7 +732,7 @@ export default class Options {
         formatter: undefined,
         tooltipHoverFormatter: undefined,
         offsetX: -20,
-        offsetY: 0,
+        offsetY: 4,
         labels: {
           colors: undefined,
           useSeriesColors: false
@@ -703,7 +751,7 @@ export default class Options {
         },
         itemMargin: {
           horizontal: 5,
-          vertical: 0
+          vertical: 2
         },
         onItemClick: {
           toggleDataSeries: true
@@ -758,14 +806,14 @@ export default class Options {
         hover: {
           filter: {
             type: 'lighten',
-            value: 0.15
+            value: 0.1
           }
         },
         active: {
           allowMultipleDataPointsSelection: false,
           filter: {
             type: 'darken',
-            value: 0.65
+            value: 0.5
           }
         }
       },
@@ -832,7 +880,7 @@ export default class Options {
           formatter: undefined,
           title: {
             formatter(seriesName) {
-              return seriesName
+              return seriesName ? seriesName + ': ' : ''
             }
           }
         },
@@ -858,6 +906,7 @@ export default class Options {
         type: 'category',
         categories: [],
         convertedCatToNumeric: false, // internal property which should not be altered outside
+        sorted: false,
         offsetX: 0,
         offsetY: 0,
         labels: {

@@ -91,33 +91,40 @@ export default class XAxis {
       xPos = xPos + colWidth + w.config.xaxis.labels.offsetX
     }
 
-    if (w.config.xaxis.labels.show) {
-      for (let i = 0; i <= labelsLen - 1; i++) {
-        let x = xPos - colWidth / 2 + w.config.xaxis.labels.offsetX
+    for (let i = 0; i <= labelsLen - 1; i++) {
+      let x = xPos - colWidth / 2 + w.config.xaxis.labels.offsetX
 
-        if (
-          i === 0 &&
-          labelsLen === 1 &&
-          colWidth / 2 === xPos &&
-          w.globals.dataPoints === 1
-        ) {
-          // single datapoint
-          x = w.globals.gridWidth / 2
-        }
-        let label = this.axesUtils.getLabel(
-          labels,
-          w.globals.timescaleLabels,
-          x,
-          i,
-          this.drawnLabels,
-          this.xaxisFontSize
-        )
+      if (
+        i === 0 &&
+        labelsLen === 1 &&
+        colWidth / 2 === xPos &&
+        w.globals.dataPoints === 1
+      ) {
+        // single datapoint
+        x = w.globals.gridWidth / 2
+      }
+      let label = this.axesUtils.getLabel(
+        labels,
+        w.globals.timescaleLabels,
+        x,
+        i,
+        this.drawnLabels,
+        this.xaxisFontSize
+      )
 
-        let offsetYCorrection = 28
-        if (w.globals.rotateXLabels) {
-          offsetYCorrection = 22
-        }
+      let offsetYCorrection = 28
+      if (w.globals.rotateXLabels) {
+        offsetYCorrection = 22
+      }
 
+      const isCategoryTickAmounts =
+        typeof w.config.xaxis.tickAmount !== 'undefined' &&
+        w.config.xaxis.tickAmount !== 'dataPoints' &&
+        w.config.xaxis.type !== 'datetime'
+
+      if (isCategoryTickAmounts) {
+        label = this.axesUtils.checkLabelBasedOnTickamount(i, label, labelsLen)
+      } else {
         label = this.axesUtils.checkForOverflowingLabels(
           i,
           label,
@@ -125,16 +132,19 @@ export default class XAxis {
           this.drawnLabels,
           this.drawnLabelsRects
         )
+      }
 
-        const getCatForeColor = () => {
-          return w.config.xaxis.convertedCatToNumeric
-            ? this.xaxisForeColors[w.globals.minX + i - 1]
-            : this.xaxisForeColors[i]
-        }
+      const getCatForeColor = () => {
+        return w.config.xaxis.convertedCatToNumeric
+          ? this.xaxisForeColors[w.globals.minX + i - 1]
+          : this.xaxisForeColors[i]
+      }
 
-        if (label.text) {
-          w.globals.xaxisLabelsCount++
-        }
+      if (label.text) {
+        w.globals.xaxisLabelsCount++
+      }
+
+      if (w.config.xaxis.labels.show) {
         let elText = graphics.drawText({
           x: label.x,
           y:
@@ -158,18 +168,19 @@ export default class XAxis {
           cssClass:
             'apexcharts-xaxis-label ' + w.config.xaxis.labels.style.cssClass
         })
-
         elXaxisTexts.add(elText)
 
         let elTooltipTitle = document.createElementNS(w.globals.SVGNS, 'title')
-        elTooltipTitle.textContent = label.text
+        elTooltipTitle.textContent = Array.isArray(label.text)
+          ? label.text.join(' ')
+          : label.text
         elText.node.appendChild(elTooltipTitle)
         if (label.text !== '') {
           this.drawnLabels.push(label.text)
           this.drawnLabelsRects.push(label)
         }
-        xPos = xPos + colWidth
       }
+      xPos = xPos + colWidth
     }
 
     if (w.config.xaxis.title.text !== undefined) {
@@ -180,7 +191,7 @@ export default class XAxis {
       let elXAxisTitleText = graphics.drawText({
         x: w.globals.gridWidth / 2 + w.config.xaxis.title.offsetX,
         y:
-          this.offY -
+          this.offY +
           parseFloat(this.xaxisFontSize) +
           w.globals.xAxisLabelsHeight +
           w.config.xaxis.title.offsetY,
@@ -200,16 +211,11 @@ export default class XAxis {
     }
 
     if (w.config.xaxis.axisBorder.show) {
-      let lineCorrection = 0
-      if (w.config.chart.type === 'bar' && w.globals.isXNumeric) {
-        lineCorrection = lineCorrection - 15
-      }
+      const offX = w.globals.barPadForNumericAxis
       let elHorzLine = graphics.drawLine(
-        w.globals.padHorizontal +
-          lineCorrection +
-          w.config.xaxis.axisBorder.offsetX,
+        w.globals.padHorizontal + w.config.xaxis.axisBorder.offsetX - offX,
         this.offY,
-        this.xaxisBorderWidth,
+        this.xaxisBorderWidth + offX,
         this.offY,
         w.config.xaxis.axisBorder.color,
         0,
@@ -272,6 +278,14 @@ export default class XAxis {
           w
         })
 
+        const yColors = this.axesUtils.getYAxisForeColor(
+          ylabels.style.colors,
+          realIndex
+        )
+        const getForeColor = () => {
+          return Array.isArray(yColors) ? yColors[i] : yColors
+        }
+
         let multiY = 0
         if (Array.isArray(label)) {
           multiY = (label.length / 2) * parseInt(ylabels.style.fontSize, 10)
@@ -281,9 +295,7 @@ export default class XAxis {
           y: yPos + colHeight + ylabels.offsetY - multiY,
           text: label,
           textAnchor: this.yaxis.opposite ? 'start' : 'end',
-          foreColor: Array.isArray(ylabels.style.colors)
-            ? ylabels.style.colors[i]
-            : ylabels.style.colors,
+          foreColor: getForeColor(),
           fontSize: ylabels.style.fontSize,
           fontFamily: ylabels.style.fontFamily,
           fontWeight: ylabels.style.fontWeight,
@@ -389,7 +401,7 @@ export default class XAxis {
         w.config.xaxis.axisTicks.color
       )
 
-      // we are not returning anything, but appending directly to the element pased in param
+      // we are not returning anything, but appending directly to the element passed in param
       appendToElement.add(line)
       line.node.classList.add('apexcharts-xaxis-tick')
     }
@@ -464,7 +476,7 @@ export default class XAxis {
             graphics.placeTextWithEllipsis(
               ts,
               ts.textContent,
-              w.config.xaxis.labels.maxHeight -
+              w.globals.xAxisLabelsHeight -
                 (w.config.legend.position === 'bottom' ? 20 : 10)
             )
           })

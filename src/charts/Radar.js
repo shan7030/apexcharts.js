@@ -4,6 +4,8 @@ import Markers from '../modules/Markers'
 import DataLabels from '../modules/DataLabels'
 import Filters from '../modules/Filters'
 import Utils from '../utils/Utils'
+import Helpers from './common/circle/Helpers'
+import CoreUtils from '../modules/CoreUtils'
 
 /**
  * ApexCharts Radar Class for Spider/Radar Charts.
@@ -37,18 +39,17 @@ class Radar {
         ? w.globals.gridHeight + w.globals.goldenPadding * 1.5
         : w.globals.gridWidth
 
-    this.maxValue = this.w.globals.maxY
-    this.minValue = this.w.globals.minY
+    this.isLog = w.config.yaxis[0].logarithmic
+
+    this.coreUtils = new CoreUtils(this.ctx)
+    this.maxValue = this.isLog
+      ? this.coreUtils.getLogVal(w.globals.maxY, 0)
+      : w.globals.maxY
+    this.minValue = this.isLog
+      ? this.coreUtils.getLogVal(this.w.globals.minY, 0)
+      : w.globals.minY
 
     this.polygons = w.config.plotOptions.radar.polygons
-
-    const longestXaxisLabel = w.globals.labels
-      .slice()
-      .sort((a, b) => b.length - a.length)[0]
-    const labelWidth = this.graphics.getTextRects(
-      longestXaxisLabel,
-      w.config.xaxis.labels.style.fontSize
-    )
 
     this.strokeWidth = w.config.stroke.show ? w.config.stroke.width : 0
 
@@ -56,7 +57,7 @@ class Radar {
       this.defaultSize / 2.1 - this.strokeWidth - w.config.chart.dropShadow.blur
 
     if (w.config.xaxis.labels.show) {
-      this.size = this.size - labelWidth.width / 1.75
+      this.size = this.size - w.globals.xAxisLabelsWidth / 1.75
     }
 
     if (w.config.plotOptions.radar.size !== undefined) {
@@ -119,6 +120,11 @@ class Radar {
       s.forEach((dv, j) => {
         const range = Math.abs(this.maxValue - this.minValue)
         dv = dv + Math.abs(this.minValue)
+
+        if (this.isLog) {
+          dv = this.coreUtils.getLogVal(dv, 0)
+        }
+
         this.dataRadiusOfPercent[i][j] = dv / range
 
         this.dataRadius[i][j] = this.dataRadiusOfPercent[i][j] * this.size
@@ -238,13 +244,19 @@ class Radar {
 
         elSeries.add(elPointsMain)
 
-        if (w.config.dataLabels.enabled) {
-          const dataLabelsConfig = w.config.dataLabels
+        const dataLabelsConfig = w.config.dataLabels
+
+        if (dataLabelsConfig.enabled) {
+          let text = dataLabelsConfig.formatter(w.globals.series[i][j], {
+            seriesIndex: i,
+            dataPointIndex: j,
+            w
+          })
 
           dataLabels.plotDataLabelsText({
             x: dataPointsPos[j].x,
             y: dataPointsPos[j].y,
-            text: w.globals.series[i][j],
+            text,
             textAnchor: 'middle',
             i,
             j: i,
@@ -270,11 +282,11 @@ class Radar {
       ret.add(xaxisTexts)
     }
 
-    ret.add(this.yaxisLabels)
-
     allSeries.forEach((elS) => {
       ret.add(elS)
     })
+
+    ret.add(this.yaxisLabels)
 
     return ret
   }
@@ -282,6 +294,7 @@ class Radar {
   drawPolygons(opts) {
     const w = this.w
     const { parent } = opts
+    const helpers = new Helpers(this.ctx)
 
     const yaxisTexts = w.globals.yAxisScale[0].result.reverse()
     const layers = yaxisTexts.length
@@ -297,7 +310,7 @@ class Radar {
     let lines = []
 
     radiusSizes.forEach((radiusSize, r) => {
-      const polygon = this.getPolygonPos(radiusSize)
+      const polygon = Utils.getPolygonPos(radiusSize, this.dataPointsLen)
       let string = ''
 
       polygon.forEach((p, i) => {
@@ -330,9 +343,11 @@ class Radar {
 
     polygonStrings.forEach((p, i) => {
       const strokeColors = this.polygons.strokeColors
+      const strokeWidth = this.polygons.strokeWidth
       const polygon = this.graphics.drawPolygon(
         p,
         Array.isArray(strokeColors) ? strokeColors[i] : strokeColors,
+        Array.isArray(strokeWidth) ? strokeWidth[i] : strokeWidth,
         w.globals.radarPolygons.fill.colors[i]
       )
       parent.add(polygon)
@@ -344,29 +359,10 @@ class Radar {
 
     if (w.config.yaxis[0].show) {
       this.yaxisLabelsTextsPos.forEach((p, i) => {
-        const yText = this.drawYAxisTexts(p.x, p.y, i, yaxisTexts[i])
+        const yText = helpers.drawYAxisTexts(p.x, p.y, i, yaxisTexts[i])
         this.yaxisLabels.add(yText)
       })
     }
-  }
-
-  drawYAxisTexts(x, y, i, text) {
-    const w = this.w
-
-    const yaxisConfig = w.config.yaxis[0]
-    const formatter = w.globals.yLabelFormatters[0]
-
-    const yaxisLabel = this.graphics.drawText({
-      x: x + yaxisConfig.labels.offsetX,
-      y: y + yaxisConfig.labels.offsetY,
-      text: formatter(text, i),
-      textAnchor: 'middle',
-      fontSize: yaxisConfig.labels.style.fontSize,
-      fontFamily: yaxisConfig.labels.style.fontFamily,
-      foreColor: yaxisConfig.labels.style.color
-    })
-
-    return yaxisLabel
   }
 
   drawXAxisTexts() {
@@ -377,7 +373,7 @@ class Radar {
       class: 'apexcharts-xaxis'
     })
 
-    let polygonPos = this.getPolygonPos(this.size)
+    let polygonPos = Utils.getPolygonPos(this.size, this.dataPointsLen)
 
     w.globals.labels.forEach((label, i) => {
       let formatter = w.config.xaxis.labels.formatter
@@ -400,9 +396,11 @@ class Radar {
           i,
           j: i,
           parent: elXAxisWrap,
-          color: xaxisLabelsConfig.style.colors[i]
-            ? xaxisLabelsConfig.style.colors[i]
-            : '#a8a8a8',
+          color:
+            Array.isArray(xaxisLabelsConfig.style.colors) &&
+            xaxisLabelsConfig.style.colors[i]
+              ? xaxisLabelsConfig.style.colors[i]
+              : '#a8a8a8',
           dataLabelsConfig: {
             textAnchor: textPos.textAnchor,
             dropShadow: { enabled: false },
@@ -516,18 +514,6 @@ class Radar {
       dataPointsPosArray.push(curPointPos)
     }
     return dataPointsPosArray
-  }
-
-  getPolygonPos(size) {
-    let dotsArray = []
-    let angle = (Math.PI * 2) / this.dataPointsLen
-    for (let i = 0; i < this.dataPointsLen; i++) {
-      let curPos = {}
-      curPos.x = size * Math.sin(i * angle)
-      curPos.y = -size * Math.cos(i * angle)
-      dotsArray.push(curPos)
-    }
-    return dotsArray
   }
 }
 

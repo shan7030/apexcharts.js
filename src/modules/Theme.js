@@ -14,6 +14,11 @@ export default class Theme {
     const w = this.w
 
     this.isColorFn = false
+    this.isHeatmapDistributed =
+      (w.config.chart.type === 'treemap' &&
+        w.config.plotOptions.treemap.distributed) ||
+      (w.config.chart.type === 'heatmap' &&
+        w.config.plotOptions.heatmap.distributed)
     this.isBarDistributed =
       w.config.plotOptions.bar.distributed &&
       (w.config.chart.type === 'bar' || w.config.chart.type === 'rangeBar')
@@ -38,14 +43,13 @@ export default class Theme {
 
       // if user provided a function in colors, we need to eval here
       if (
-        w.globals.axisCharts &&
-        w.config.chart.type !== 'bar' &&
         Array.isArray(w.config.colors) &&
         w.config.colors.length > 0 &&
-        w.config.colors.length === w.config.series.length
-        // colors & series length needs same
+        typeof w.config.colors[0] === 'function'
       ) {
-        w.globals.colors = w.config.colors.map((c, i) => {
+        w.globals.colors = w.config.series.map((s, i) => {
+          let c = w.config.colors[i]
+          if (!c) c = w.config.colors[0]
           if (typeof c === 'function') {
             this.isColorFn = true
             return c({
@@ -64,10 +68,17 @@ export default class Theme {
       }
     }
 
+    // user defined colors in series array
+    w.globals.seriesColors.map((c, i) => {
+      if (c) {
+        w.globals.colors[i] = c
+      }
+    })
+
     if (w.config.theme.monochrome.enabled) {
       let monoArr = []
       let glsCnt = w.globals.series.length
-      if (this.isBarDistributed) {
+      if (this.isBarDistributed || this.isHeatmapDistributed) {
         glsCnt = w.globals.series[0].length * w.globals.series.length
       }
 
@@ -93,7 +104,7 @@ export default class Theme {
     }
     const defaultColors = w.globals.colors.slice()
 
-    // if user specfied less colors than no. of series, push the same colors again
+    // if user specified fewer colors than no. of series, push the same colors again
     this.pushExtraColors(w.globals.colors)
 
     const colorTypes = ['fill', 'stroke']
@@ -115,7 +126,7 @@ export default class Theme {
 
     if (w.config.plotOptions.radar.polygons.fill.colors === undefined) {
       w.globals.radarPolygons.fill.colors = [
-        w.config.theme.mode === 'dark' ? '#202D48' : '#fff'
+        w.config.theme.mode === 'dark' ? '#424242' : 'none'
       ]
     } else {
       w.globals.radarPolygons.fill.colors = w.config.plotOptions.radar.polygons.fill.colors.slice()
@@ -143,12 +154,15 @@ export default class Theme {
     if (distributed === null) {
       distributed =
         this.isBarDistributed ||
+        this.isHeatmapDistributed ||
         (w.config.chart.type === 'heatmap' &&
           w.config.plotOptions.heatmap.colorScale.inverse)
     }
 
-    if (distributed) {
-      len = w.globals.series[0].length * w.globals.series.length
+    if (distributed && w.globals.series.length) {
+      len =
+        w.globals.series[w.globals.maxValsInArrayIndex].length *
+        w.globals.series.length
     }
 
     if (colorSeries.length < len) {

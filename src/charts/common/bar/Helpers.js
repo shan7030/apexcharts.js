@@ -1,5 +1,6 @@
 import Fill from '../../../modules/Fill'
 import Graphics from '../../../modules/Graphics'
+import Series from '../../../modules/Series'
 
 export default class Helpers {
   constructor(barCtx) {
@@ -51,10 +52,15 @@ export default class Helpers {
       dataPoints = w.globals.labels.length
     }
 
+    let seriesLen = this.barCtx.seriesLen
+    if (w.config.plotOptions.bar.rangeBarGroupRows) {
+      seriesLen = 1
+    }
+
     if (this.barCtx.isHorizontal) {
       // height divided into equal parts
       yDivision = w.globals.gridHeight / dataPoints
-      barHeight = yDivision / this.barCtx.seriesLen
+      barHeight = yDivision / seriesLen
 
       if (w.globals.isXNumeric) {
         yDivision = w.globals.gridHeight / this.barCtx.totalItems
@@ -88,9 +94,14 @@ export default class Helpers {
         if (w.config.xaxis.convertedCatToNumeric) {
           xRatio = this.barCtx.initialXRatio
         }
-        if (w.globals.minXDiff && w.globals.minXDiff / xRatio > 0) {
+        if (
+          w.globals.minXDiff &&
+          w.globals.minXDiff !== 0.5 &&
+          w.globals.minXDiff / xRatio > 0
+        ) {
           xDivision = w.globals.minXDiff / xRatio
         }
+
         barWidth =
           ((xDivision / this.barCtx.seriesLen) *
             parseInt(this.barCtx.barOptions.columnWidth, 10)) /
@@ -180,25 +191,28 @@ export default class Helpers {
     return strokeWidth
   }
 
-  barBackground({ bc, i, y1, y2, elSeries }) {
+  barBackground({ j, i, x1, x2, y1, y2, elSeries }) {
     const w = this.w
     const graphics = new Graphics(this.barCtx.ctx)
 
+    const sr = new Series(this.barCtx.ctx)
+    let activeSeriesIndex = sr.getActiveConfigSeriesIndex()
+
     if (
       this.barCtx.barOptions.colors.backgroundBarColors.length > 0 &&
-      i === 0
+      activeSeriesIndex === i
     ) {
-      if (bc >= this.barCtx.barOptions.colors.backgroundBarColors.length) {
-        bc = 0
+      if (j >= this.barCtx.barOptions.colors.backgroundBarColors.length) {
+        j -= this.barCtx.barOptions.colors.backgroundBarColors.length
       }
 
-      let bcolor = this.barCtx.barOptions.colors.backgroundBarColors[bc]
+      let bcolor = this.barCtx.barOptions.colors.backgroundBarColors[j]
       let rect = graphics.drawRect(
-        0,
-        y1,
-        w.globals.gridWidth,
-        y2,
-        0,
+        typeof x1 !== 'undefined' ? x1 : 0,
+        typeof y1 !== 'undefined' ? y1 : 0,
+        typeof x2 !== 'undefined' ? x2 : w.globals.gridWidth,
+        typeof y2 !== 'undefined' ? y2 : w.globals.gridHeight,
+        this.barCtx.barOptions.colors.backgroundBarRadius,
         bcolor,
         this.barCtx.barOptions.colors.backgroundBarOpacity
       )
@@ -207,102 +221,106 @@ export default class Helpers {
     }
   }
 
-  /** getBarEndingShape draws the various shapes on top of bars/columns
-   * @memberof Bar
-   * @param {object} w - chart context
-   * @param {object} opts - consists several properties like barHeight/barWidth
-   * @param {array} series - global primary series
-   * @param {int} i - current iterating series's index
-   * @param {int} j - series's j of i
-   * @return {object} path - ending shape whether round/arrow
-   *         ending_p_from - similar to pathFrom
-   *         newY - which is calculated from existing y and new shape's top
-   **/
-  getBarEndingShape(w, opts, series, i, j) {
-    let graphics = new Graphics(this.barCtx.ctx)
+  getColumnPaths({
+    barWidth,
+    barXPosition,
+    yRatio,
+    y1,
+    y2,
+    strokeWidth,
+    series,
+    realIndex,
+    i,
+    j,
+    w
+  }) {
+    const graphics = new Graphics(this.barCtx.ctx)
+    strokeWidth = Array.isArray(strokeWidth)
+      ? strokeWidth[realIndex]
+      : strokeWidth
+    if (!strokeWidth) strokeWidth = 0
 
-    if (this.barCtx.isHorizontal) {
-      let endingShape = null
-      let endingShapeFrom = ''
-      let x = opts.x
+    const x1 = barXPosition
+    const x2 = barXPosition + barWidth
 
-      if (typeof series[i][j] !== 'undefined' || series[i][j] !== null) {
-        let inverse = series[i][j] < 0
-        let eX = opts.barHeight / 2 - opts.strokeWidth
-        if (inverse) eX = -opts.barHeight / 2 - opts.strokeWidth
+    let pathTo = graphics.move(x1, y1)
+    let pathFrom = graphics.move(x1, y1)
 
-        if (!w.config.chart.stacked) {
-          if (this.barCtx.barOptions.endingShape === 'rounded') {
-            x = opts.x - eX / 2
-          }
-        }
+    if (w.globals.previousPaths.length > 0) {
+      pathFrom = this.barCtx.getPreviousPath(realIndex, j, false)
+    }
 
-        switch (this.barCtx.barOptions.endingShape) {
-          case 'flat':
-            endingShape = graphics.line(
-              x,
-              opts.barYPosition + opts.barHeight - opts.strokeWidth
-            )
-            break
+    pathTo =
+      pathTo +
+      graphics.line(x1, y2) +
+      graphics.line(barXPosition + barWidth - strokeWidth, y2) +
+      graphics.line(x2 - strokeWidth, y2) +
+      graphics.line(x2 - strokeWidth, y1) +
+      graphics.line(barXPosition + barWidth - strokeWidth, y1) +
+      'z'
 
-          case 'rounded':
-            endingShape = graphics.quadraticCurve(
-              x + eX,
-              opts.barYPosition + (opts.barHeight - opts.strokeWidth) / 2,
-              x,
-              opts.barYPosition + opts.barHeight - opts.strokeWidth
-            )
-            break
-        }
-      }
-      return {
-        path: endingShape,
-        ending_p_from: endingShapeFrom,
-        newX: x
-      }
-    } else {
-      let endingShape = null
-      let endingShapeFrom = ''
-      let y = opts.y
+    pathFrom =
+      pathFrom +
+      graphics.line(x1, y1) +
+      graphics.line(x2 - strokeWidth, y1) +
+      graphics.line(x2 - strokeWidth, y1) +
+      graphics.line(x2 - strokeWidth, y1) +
+      graphics.line(x1, y1)
 
-      if (typeof series[i][j] !== 'undefined' || series[i][j] !== null) {
-        let inverse = series[i][j] < 0
+    return {
+      pathTo,
+      pathFrom
+    }
+  }
 
-        let eY = opts.barWidth / 2 - opts.strokeWidth
+  getBarpaths({
+    barYPosition,
+    barHeight,
+    x1,
+    x2,
+    strokeWidth,
+    series,
+    realIndex,
+    i,
+    j,
+    w
+  }) {
+    const graphics = new Graphics(this.barCtx.ctx)
+    strokeWidth = Array.isArray(strokeWidth)
+      ? strokeWidth[realIndex]
+      : strokeWidth
+    if (!strokeWidth) strokeWidth = 0
 
-        if (inverse) eY = -opts.barWidth / 2 - opts.strokeWidth
+    let pathTo = graphics.move(x1, barYPosition)
+    let pathFrom = graphics.move(x1, barYPosition)
 
-        if (!w.config.chart.stacked) {
-          // the shape exceeds the chart height, hence reduce y
-          if (this.barCtx.barOptions.endingShape === 'rounded') {
-            y = y + eY / 2
-          }
-        }
+    if (w.globals.previousPaths.length > 0) {
+      pathFrom = this.barCtx.getPreviousPath(realIndex, j, false)
+    }
 
-        switch (this.barCtx.barOptions.endingShape) {
-          case 'flat':
-            endingShape = graphics.line(
-              opts.barXPosition + opts.barWidth - opts.strokeWidth,
-              y
-            )
-            break
+    const y1 = barYPosition
+    const y2 = barYPosition + barHeight
 
-          case 'rounded':
-            endingShape = graphics.quadraticCurve(
-              opts.barXPosition + (opts.barWidth - opts.strokeWidth) / 2,
-              y - eY,
-              opts.barXPosition + opts.barWidth - opts.strokeWidth,
-              y
-            )
-            break
-        }
-      }
+    pathTo =
+      pathTo +
+      graphics.line(x2, y1) +
+      graphics.line(x2, barYPosition + barHeight - strokeWidth) +
+      graphics.line(x2, y2 - strokeWidth) +
+      graphics.line(x1, y2 - strokeWidth) +
+      graphics.line(x1, barYPosition + barHeight - strokeWidth) +
+      'z'
 
-      return {
-        path: endingShape,
-        ending_p_from: endingShapeFrom,
-        newY: y
-      }
+    pathFrom =
+      pathFrom +
+      graphics.line(x1, y1) +
+      graphics.line(x1, y2 - strokeWidth) +
+      graphics.line(x1, y2 - strokeWidth) +
+      graphics.line(x1, y2 - strokeWidth) +
+      graphics.line(x1, y1)
+
+    return {
+      pathTo,
+      pathFrom
     }
   }
 }

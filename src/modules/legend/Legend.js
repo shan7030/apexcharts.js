@@ -132,6 +132,7 @@ class Legend {
 
       mStyle.background = fillcolor[i]
       mStyle.color = fillcolor[i]
+      mStyle.setProperty('background', fillcolor[i], 'important')
 
       // override fill color with custom legend.markers.fillColors
       if (
@@ -139,6 +140,12 @@ class Legend {
         w.config.legend.markers.fillColors[i]
       ) {
         mStyle.background = w.config.legend.markers.fillColors[i]
+      }
+
+      // override with data color
+      if (w.globals.seriesColors[i] !== undefined) {
+        mStyle.background = w.globals.seriesColors[i]
+        mStyle.color = w.globals.seriesColors[i]
       }
 
       mStyle.height = Array.isArray(mHeight)
@@ -161,7 +168,9 @@ class Legend {
 
       if (w.config.legend.markers.customHTML) {
         if (Array.isArray(w.config.legend.markers.customHTML)) {
-          elMarker.innerHTML = w.config.legend.markers.customHTML[i]()
+          if (w.config.legend.markers.customHTML[i]) {
+            elMarker.innerHTML = w.config.legend.markers.customHTML[i]()
+          }
         } else {
           elMarker.innerHTML = w.config.legend.markers.customHTML()
         }
@@ -180,7 +189,9 @@ class Legend {
 
       let elLegendText = document.createElement('span')
       elLegendText.classList.add('apexcharts-legend-text')
-      elLegendText.innerHTML = Array.isArray(text) ? text.join(' ') : text
+      elLegendText.innerHTML = Array.isArray(text)
+        ? Utils.sanitizeDom(text.join(' '))
+        : Utils.sanitizeDom(text)
 
       let textColor = w.config.legend.labels.useSeriesColors
         ? w.globals.colors[i]
@@ -250,6 +261,7 @@ class Legend {
 
       Graphics.setAttrs(elLegend, {
         rel: i + 1,
+        seriesName: Utils.escapeString(legendNames[i]),
         'data:collapsed': collapsedSeries || ancillaryCollapsedSeries
       })
 
@@ -262,13 +274,7 @@ class Legend {
       }
     }
 
-    // for now - just prevent click on heatmap legend - and allow hover only
-    const clickAllowed =
-      w.config.chart.type !== 'heatmap' && !this.isBarsDistributed
-
-    if (clickAllowed && w.config.legend.onItemClick.toggleDataSeries) {
-      w.globals.dom.elWrap.addEventListener('click', self.onLegendClick, true)
-    }
+    w.globals.dom.elWrap.addEventListener('click', self.onLegendClick, true)
 
     if (w.config.legend.onItemHover.highlightDataSeries) {
       w.globals.dom.elWrap.addEventListener(
@@ -409,6 +415,8 @@ class Legend {
   }
 
   onLegendClick(e) {
+    const w = this.w
+
     if (
       e.target.classList.contains('apexcharts-legend-text') ||
       e.target.classList.contains('apexcharts-legend-marker')
@@ -436,7 +444,15 @@ class Legend {
         ])
       }
 
-      this.legendHelpers.toggleDataSeries(seriesCnt, isHidden)
+      // for now - just prevent click on heatmap legend - and allow hover only
+      const clickAllowed =
+        w.config.chart.type !== 'treemap' &&
+        w.config.chart.type !== 'heatmap' &&
+        !this.isBarsDistributed
+
+      if (clickAllowed && w.config.legend.onItemClick.toggleDataSeries) {
+        this.legendHelpers.toggleDataSeries(seriesCnt, isHidden)
+      }
     }
   }
 }

@@ -78,7 +78,9 @@ export default class ZoomPanSelection extends Toolbar {
     }
     this.preselectedSelection()
 
-    this.hoverArea = w.globals.dom.baseEl.querySelector(w.globals.chartClass)
+    this.hoverArea = w.globals.dom.baseEl.querySelector(
+      `${w.globals.chartClass} .apexcharts-svg`
+    )
     this.hoverArea.classList.add('apexcharts-zoomable')
 
     this.eventList.forEach((event) => {
@@ -115,18 +117,23 @@ export default class ZoomPanSelection extends Toolbar {
       ? w.config.chart.zoom.type
       : w.config.chart.selection.type
 
+    const autoSelected = w.config.chart.toolbar.autoSelected
+
     if (e.shiftKey) {
       this.shiftWasPressed = true
-      toolbar.enableZoomPanFromToolbar('pan')
+      toolbar.enableZoomPanFromToolbar(autoSelected === 'pan' ? 'zoom' : 'pan')
     } else {
       if (this.shiftWasPressed) {
-        toolbar.enableZoomPanFromToolbar('zoom')
+        toolbar.enableZoomPanFromToolbar(autoSelected)
         this.shiftWasPressed = false
       }
     }
 
+    const tc = e.target.classList
     const falsePositives =
-      e.target.classList.contains('apexcharts-selection-rect') ||
+      tc.contains('apexcharts-selection-rect') ||
+      tc.contains('apexcharts-legend-marker') ||
+      tc.contains('apexcharts-legend-text') ||
       e.target.parentNode.classList.contains('apexcharts-toolbar')
 
     if (falsePositives) return
@@ -290,7 +297,7 @@ export default class ZoomPanSelection extends Toolbar {
     }
   }
 
-  drawSelectionRect({ x, y, width, height, translateX, translateY }) {
+  drawSelectionRect({ x, y, width, height, translateX = 0, translateY = 0 }) {
     const w = this.w
     const zoomRect = this.zoomRect
     const selectionRect = this.selectionRect
@@ -356,11 +363,11 @@ export default class ZoomPanSelection extends Toolbar {
 
     let startX = me.startX - 1
     let startY = me.startY
+    let inversedX = false
+    let inversedY = false
 
     let selectionWidth = me.clientX - gridRectDim.left - startX
     let selectionHeight = me.clientY - gridRectDim.top - startY
-    let translateX = 0
-    let translateY = 0
 
     let selectionRect = {}
 
@@ -374,42 +381,36 @@ export default class ZoomPanSelection extends Toolbar {
 
     // inverse selection X
     if (startX > me.clientX - gridRectDim.left) {
+      inversedX = true
       selectionWidth = Math.abs(selectionWidth)
-      translateX = -selectionWidth
     }
 
     // inverse selection Y
     if (startY > me.clientY - gridRectDim.top) {
+      inversedY = true
       selectionHeight = Math.abs(selectionHeight)
-      translateY = -selectionHeight
     }
 
     if (zoomtype === 'x') {
       selectionRect = {
-        x: startX,
+        x: inversedX ? startX - selectionWidth : startX,
         y: 0,
         width: selectionWidth,
-        height: w.globals.gridHeight,
-        translateX,
-        translateY: 0
+        height: w.globals.gridHeight
       }
     } else if (zoomtype === 'y') {
       selectionRect = {
         x: 0,
-        y: startY,
+        y: inversedY ? startY - selectionHeight : startY,
         width: w.globals.gridWidth,
-        height: selectionHeight,
-        translateX: 0,
-        translateY
+        height: selectionHeight
       }
     } else {
       selectionRect = {
-        x: startX,
-        y: startY,
+        x: inversedX ? startX - selectionWidth : startX,
+        y: inversedY ? startY - selectionHeight : startY,
         width: selectionWidth,
-        height: selectionHeight,
-        translateX,
-        translateY
+        height: selectionHeight
       }
     }
 
@@ -429,6 +430,20 @@ export default class ZoomPanSelection extends Toolbar {
     if (type === 'resizing') {
       timerInterval = 30
     }
+
+    // update selection when selection rect is dragged
+    const getSelAttr = (attr) => {
+      return parseFloat(selRect.node.getAttribute(attr))
+    }
+    const draggedProps = {
+      x: getSelAttr('x'),
+      y: getSelAttr('y'),
+      width: getSelAttr('width'),
+      height: getSelAttr('height')
+    }
+    w.globals.selection = draggedProps
+    // update selection ends
+
     if (
       typeof w.config.chart.events.selection === 'function' &&
       w.globals.selectionEnabled
@@ -453,7 +468,7 @@ export default class ZoomPanSelection extends Toolbar {
           w.globals.yAxisScale[0].niceMax -
           (selectionRect.top - gridRectDim.top) * xyRatios.yRatio[0]
 
-        w.config.chart.events.selection(this.ctx, {
+        const xyAxis = {
           xaxis: {
             min: minX,
             max: maxX
@@ -462,7 +477,15 @@ export default class ZoomPanSelection extends Toolbar {
             min: minY,
             max: maxY
           }
-        })
+        }
+        w.config.chart.events.selection(this.ctx, xyAxis)
+
+        if (
+          w.config.chart.brush.enabled &&
+          w.config.chart.events.brushScrolled !== undefined
+        ) {
+          w.config.chart.events.brushScrolled(this.ctx, xyAxis)
+        }
       }, timerInterval)
     }
   }
@@ -484,9 +507,18 @@ export default class ZoomPanSelection extends Toolbar {
       me.endY = tempY
     }
 
-    let xLowestValue =
-      w.globals.xAxisScale.niceMin + me.startX * xyRatios.xRatio
-    let xHighestValue = w.globals.xAxisScale.niceMin + me.endX * xyRatios.xRatio
+    let xLowestValue = undefined
+    let xHighestValue = undefined
+
+    if (!w.globals.isTimelineBar) {
+      xLowestValue = w.globals.xAxisScale.niceMin + me.startX * xyRatios.xRatio
+      xHighestValue = w.globals.xAxisScale.niceMin + me.endX * xyRatios.xRatio
+    } else {
+      xLowestValue =
+        w.globals.yAxisScale[0].niceMin + me.startX * xyRatios.invertedYRatio
+      xHighestValue =
+        w.globals.yAxisScale[0].niceMin + me.endX * xyRatios.invertedYRatio
+    }
 
     // TODO: we will consider the 1st y axis values here for getting highest and lowest y
     let yHighestValue = []
@@ -508,16 +540,9 @@ export default class ZoomPanSelection extends Toolbar {
     ) {
       if (w.globals.zoomEnabled) {
         let yaxis = Utils.clone(w.globals.initialConfig.yaxis)
+        let xaxis = Utils.clone(w.globals.initialConfig.xaxis)
 
         w.globals.zoomed = true
-
-        // before zooming in/out, store the last yaxis and xaxis range, so that when user hits the RESET button, we get the original range
-        // also - make sure user is not already zoomed in/out - otherwise we will store zoomed values in lastAxis
-        // DEAD code - the below condition will never run now as zoomed is made false above
-        if (!w.globals.zoomed) {
-          w.globals.lastXAxis = Utils.clone(w.config.xaxis)
-          w.globals.lastYAxis = Utils.clone(w.config.yaxis)
-        }
 
         if (w.config.xaxis.convertedCatToNumeric) {
           xLowestValue = Math.floor(xLowestValue)
@@ -532,9 +557,12 @@ export default class ZoomPanSelection extends Toolbar {
             xHighestValue = xLowestValue + 1
           }
         }
-        let xaxis = {
-          min: xLowestValue,
-          max: xHighestValue
+
+        if (zoomtype === 'xy' || zoomtype === 'x') {
+          xaxis = {
+            min: xLowestValue,
+            max: xHighestValue
+          }
         }
 
         if (zoomtype === 'xy' || zoomtype === 'y') {
@@ -555,7 +583,7 @@ export default class ZoomPanSelection extends Toolbar {
           let beforeZoomRange = toolbar.getBeforeZoomRange(xaxis, yaxis)
           if (beforeZoomRange) {
             xaxis = beforeZoomRange.xaxis ? beforeZoomRange.xaxis : xaxis
-            yaxis = beforeZoomRange.yaxis ? beforeZoomRange.yaxe : yaxis
+            yaxis = beforeZoomRange.yaxis ? beforeZoomRange.yaxis : yaxis
           }
         }
 
@@ -631,9 +659,11 @@ export default class ZoomPanSelection extends Toolbar {
       y: me.clientY
     }
 
-    let xLowestValue = w.globals.minX
+    let xLowestValue = w.globals.isTimelineBar ? w.globals.minY : w.globals.minX
 
-    let xHighestValue = w.globals.maxX
+    let xHighestValue = w.globals.isTimelineBar
+      ? w.globals.maxY
+      : w.globals.maxX
 
     // on a category, we don't pan continuosly as it causes bugs
     if (!w.config.xaxis.convertedCatToNumeric) {
@@ -671,24 +701,31 @@ export default class ZoomPanSelection extends Toolbar {
     const xyRatios = this.xyRatios
     let yaxis = Utils.clone(w.globals.initialConfig.yaxis)
 
-    if (this.moveDirection === 'left') {
-      xLowestValue =
-        w.globals.minX + (w.globals.gridWidth / 15) * xyRatios.xRatio
-      xHighestValue =
-        w.globals.maxX + (w.globals.gridWidth / 15) * xyRatios.xRatio
-    } else if (this.moveDirection === 'right') {
-      xLowestValue =
-        w.globals.minX - (w.globals.gridWidth / 15) * xyRatios.xRatio
-      xHighestValue =
-        w.globals.maxX - (w.globals.gridWidth / 15) * xyRatios.xRatio
+    let xRatio = xyRatios.xRatio
+    let minX = w.globals.minX
+    let maxX = w.globals.maxX
+    if (w.globals.isTimelineBar) {
+      xRatio = xyRatios.invertedYRatio
+      minX = w.globals.minY
+      maxX = w.globals.maxY
     }
 
-    if (
-      xLowestValue < w.globals.initialMinX ||
-      xHighestValue > w.globals.initialMaxX
-    ) {
-      xLowestValue = w.globals.minX
-      xHighestValue = w.globals.maxX
+    if (this.moveDirection === 'left') {
+      xLowestValue = minX + (w.globals.gridWidth / 15) * xRatio
+      xHighestValue = maxX + (w.globals.gridWidth / 15) * xRatio
+    } else if (this.moveDirection === 'right') {
+      xLowestValue = minX - (w.globals.gridWidth / 15) * xRatio
+      xHighestValue = maxX - (w.globals.gridWidth / 15) * xRatio
+    }
+
+    if (!w.globals.isTimelineBar) {
+      if (
+        xLowestValue < w.globals.initialMinX ||
+        xHighestValue > w.globals.initialMaxX
+      ) {
+        xLowestValue = minX
+        xHighestValue = maxX
+      }
     }
 
     let xaxis = {
